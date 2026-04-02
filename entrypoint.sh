@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Set HOME to the persistent workspace home directory
+export HOME=/workspace/home
+
+# Ensure workspace directories exist with correct ownership
+mkdir -p /workspace/home /workspace/project
+chown claude:claude /workspace/home /workspace/project
+chown -R claude:claude /workspace/home
+
+# Copy host configs into the workspace home directory
+if [ -d /host-config ]; then
+
+    # gitconfig
+    if [ -f /host-config/gitconfig ]; then
+        cp /host-config/gitconfig /workspace/home/.gitconfig
+        chown claude:claude /workspace/home/.gitconfig
+    fi
+
+    # SSH keys and config
+    if [ -d /host-config/ssh ]; then
+        mkdir -p /workspace/home/.ssh
+        cp -a /host-config/ssh/. /workspace/home/.ssh/
+        chmod 700 /workspace/home/.ssh
+        find /workspace/home/.ssh -type f -exec chmod 600 {} +
+        chown -R claude:claude /workspace/home/.ssh
+    fi
+
+    # Claude credentials
+    if [ -d /host-config/claude-credentials ]; then
+        mkdir -p /workspace/home/.claude
+        cp -a /host-config/claude-credentials/. /workspace/home/.claude/
+        chown -R claude:claude /workspace/home/.claude
+
+        # If .claude.json exists inside the credentials dir, also place it at $HOME/.claude.json
+        if [ -f /host-config/claude-credentials/.claude.json ]; then
+            cp /host-config/claude-credentials/.claude.json /workspace/home/.claude.json
+            chown claude:claude /workspace/home/.claude.json
+        fi
+    fi
+fi
+
+# Mark all directories as safe for git
+gosu claude git config --global --add safe.directory '*'
+
+# Docker socket GID detection: allow the claude user to access the host Docker daemon
+if [ -S /var/run/docker.sock ]; then
+    DOCKER_SOCK_GID=$(stat -c '%g' /var/run/docker.sock)
+    if ! getent group "${DOCKER_SOCK_GID}" > /dev/null 2>&1; then
+        groupadd -g "${DOCKER_SOCK_GID}" dockerhost
+    fi
+    DOCKER_GROUP_NAME=$(getent group "${DOCKER_SOCK_GID}" | cut -d: -f1)
+    usermod -aG "${DOCKER_GROUP_NAME}" claude
+fi
+
+# Drop privileges and execute the requested command (or bash if none given)
+if [ $# -eq 0 ]; then
+    exec gosu claude bash
+else
+    exec gosu claude "$@"
+fi
