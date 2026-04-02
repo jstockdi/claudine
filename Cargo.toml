@@ -1,0 +1,15 @@
+[package]
+name = "claudine"
+version = "0.1.0"
+edition = "2021"
+description = "Run Claude Code in isolated Docker containers"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+clap_complete = "4"
+serde = { version = "1", features = ["derive"] }
+toml = "0.8"
+dialoguer = "0.11"
+which = "7"
+tempfile = "3"
+anyhow = "1"
