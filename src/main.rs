@@ -13,7 +13,7 @@ fn main() -> anyhow::Result<()> {
     match cli.command {
         Command::Build => docker::cmd_build(),
         Command::Init { project } => init::cmd_init(&project),
-        Command::Run { .. } => anyhow::bail!("not implemented yet"),
+        Command::Run { project, args } => docker::cmd_run(&project, &args),
         Command::Shell { .. } => anyhow::bail!("not implemented yet"),
         Command::Destroy { .. } => anyhow::bail!("not implemented yet"),
         Command::List => anyhow::bail!("not implemented yet"),
