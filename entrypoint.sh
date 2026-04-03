@@ -6,12 +6,8 @@ mkdir -p /workspace/home /workspace/project
 chown claude:claude /workspace/home /workspace/project
 chown -R claude:claude /workspace/home
 
-# Create root-level symlinks for clean paths
-ln -sfn /workspace/home /home
-ln -sfn /workspace/project /project
-
-# Set HOME to the symlinked path
-export HOME=/home
+# Symlinks /home -> /workspace/home and /project -> /workspace/project
+# are created in the Dockerfile so Docker's -w flag resolves correctly
 
 # Copy host configs into the workspace home directory
 if [ -d /host-config ]; then

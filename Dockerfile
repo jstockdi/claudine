@@ -48,10 +48,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
     && apt-get purge -y build-essential && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Remove default /home so the entrypoint can symlink it to the persistent volume
-RUN rm -rf /home
+# Remove default /home and create symlinks to the persistent volume
+# These must exist at image build time so Docker's -w flag resolves correctly
+RUN rm -rf /home \
+    && ln -s /workspace/home /home \
+    && ln -s /workspace/project /project
 
-# Create non-root user with home at /home (symlinked to /workspace/home at runtime)
+# Create non-root user with home at /home (symlinked to /workspace/home)
 RUN useradd -d /home -s /bin/bash claude
 
 # Add alias so claude always runs with --dangerously-skip-permissions
