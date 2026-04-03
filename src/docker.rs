@@ -291,7 +291,7 @@ pub(crate) fn build_run_args(project: &str, image: &str, repo: Option<&str>) -> 
         "run".to_string(),
         "--rm".to_string(),
         "-v".to_string(),
-        format!("{}:/workspace", project::volume_name(project)),
+        format!("{}:/project", project::volume_name(project)),
         "-v".to_string(),
         "/var/run/docker.sock:/var/run/docker.sock".to_string(),
     ];
@@ -303,7 +303,7 @@ pub(crate) fn build_run_args(project: &str, image: &str, repo: Option<&str>) -> 
     };
 
     args.push("-e".to_string());
-    args.push("HOME=/home".to_string());
+    args.push("HOME=/project/home".to_string());
 
     args.push("--shm-size=256m".to_string());
 

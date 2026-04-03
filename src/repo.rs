@@ -105,13 +105,13 @@ fn repo_remove(project_name: &str, dir: &str) -> anyhow::Result<()> {
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
 
-    let rm_target = format!("/workspace/project/{}", dir);
+    let rm_target = format!("/project/{}", dir);
     let status = Command::new("docker")
         .args([
             "run",
             "--rm",
             "-v",
-            &format!("{}:/workspace", project::volume_name(project_name)),
+            &format!("{}:/project", project::volume_name(project_name)),
             &image,
             "rm",
             "-rf",

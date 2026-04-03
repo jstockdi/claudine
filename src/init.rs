@@ -130,7 +130,7 @@ pub fn clone_repo(
         "run".to_string(),
         "--rm".to_string(),
         "-v".to_string(),
-        format!("{}:/workspace", project::volume_name(project_name)),
+        format!("{}:/project", project::volume_name(project_name)),
     ];
 
     // Mount host gitconfig if it exists
@@ -171,8 +171,8 @@ pub fn clone_repo(
     // Image name
     args.push(image.to_string());
 
-    // Clone command — clone into /workspace/project/<dir>
-    let clone_target = format!("/workspace/project/{}", repo.dir);
+    // Clone command — clone into /project/<dir>
+    let clone_target = format!("/project/{}", repo.dir);
     let mut clone_cmd = vec!["git".to_string(), "clone".to_string()];
     if let Some(ref b) = repo.branch {
         clone_cmd.push("--branch".to_string());

@@ -1,58 +1,55 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Ensure workspace directories exist with correct ownership
-mkdir -p /workspace/home /workspace/project
-chown claude:claude /workspace/home /workspace/project
-chown -R claude:claude /workspace/home
+# Ensure home directory exists with correct ownership
+mkdir -p /project/home
+chown claude:claude /project/home
+chown -R claude:claude /project/home
 
-# Symlinks /home -> /workspace/home and /project -> /workspace/project
-# are created in the Dockerfile so Docker's -w flag resolves correctly
-
-# Copy host configs into the workspace home directory
+# Copy host configs into the home directory
 if [ -d /host-config ]; then
 
     # gitconfig
     if [ -f /host-config/gitconfig ]; then
-        cp /host-config/gitconfig /workspace/home/.gitconfig
-        chown claude:claude /workspace/home/.gitconfig
+        cp /host-config/gitconfig /project/home/.gitconfig
+        chown claude:claude /project/home/.gitconfig
     fi
 
     # SSH key — single key file for security isolation
     if [ -f /host-config/ssh_key ]; then
-        mkdir -p /workspace/home/.ssh
-        cp /host-config/ssh_key /workspace/home/.ssh/id_key
-        chmod 700 /workspace/home/.ssh
-        chmod 600 /workspace/home/.ssh/id_key
-        chown -R claude:claude /workspace/home/.ssh
+        mkdir -p /project/home/.ssh
+        cp /host-config/ssh_key /project/home/.ssh/id_key
+        chmod 700 /project/home/.ssh
+        chmod 600 /project/home/.ssh/id_key
+        chown -R claude:claude /project/home/.ssh
         # Write minimal SSH config to use this key by default
-        cat > /workspace/home/.ssh/config <<SSHEOF
+        cat > /project/home/.ssh/config <<SSHEOF
 Host *
-    IdentityFile /home/.ssh/id_key
+    IdentityFile /project/home/.ssh/id_key
     IdentitiesOnly yes
     StrictHostKeyChecking accept-new
 SSHEOF
-        chmod 600 /workspace/home/.ssh/config
-        chown claude:claude /workspace/home/.ssh/config
+        chmod 600 /project/home/.ssh/config
+        chown claude:claude /project/home/.ssh/config
     fi
 
     # Claude credentials directory (~/.claude/)
     if [ -d /host-config/claude-credentials ]; then
-        mkdir -p /workspace/home/.claude
-        cp -a /host-config/claude-credentials/. /workspace/home/.claude/
-        chown -R claude:claude /workspace/home/.claude
+        mkdir -p /project/home/.claude
+        cp -a /host-config/claude-credentials/. /project/home/.claude/
+        chown -R claude:claude /project/home/.claude
     fi
 
     # Claude config file (~/.claude.json) — may be separate from ~/.claude/
     if [ -f /host-config/claude-json ]; then
-        cp /host-config/claude-json /workspace/home/.claude.json
-        chown claude:claude /workspace/home/.claude.json
+        cp /host-config/claude-json /project/home/.claude.json
+        chown claude:claude /project/home/.claude.json
     fi
 fi
 
 # Write container-specific Claude settings (overrides host settings)
-mkdir -p /workspace/home/.claude
-cat > /workspace/home/.claude/settings.json <<'SETTINGS'
+mkdir -p /project/home/.claude
+cat > /project/home/.claude/settings.json <<'SETTINGS'
 {
   "permissions": {
     "allow": [
@@ -109,7 +106,7 @@ cat > /workspace/home/.claude/settings.json <<'SETTINGS'
   }
 }
 SETTINGS
-chown claude:claude /workspace/home/.claude/settings.json
+chown claude:claude /project/home/.claude/settings.json
 
 # Mark all directories as safe for git
 gosu claude git config --global --add safe.directory '*'
