@@ -165,6 +165,7 @@ fn exec_in_project(project: &str, repo: Option<&str>, container_cmd: &[String]) 
             cmd.arg("-it");
         }
 
+        cmd.args(["-u", "claude"]);
         cmd.args(["-w", &workdir]);
         cmd.args(["-e", "HOME=/project/home"]);
         cmd.args(["-e", "PATH=/project/home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]);
