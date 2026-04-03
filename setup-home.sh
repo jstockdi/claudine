@@ -91,5 +91,10 @@ cat > /project/home/.claude/settings.json <<'SETTINGS'
 SETTINGS
 chown claude:claude /project/home/.claude/settings.json
 
+# Ensure claude CLI is available at ~/.local/bin (expected by native install method)
+mkdir -p /project/home/.local/bin
+ln -sf /usr/local/bin/claude /project/home/.local/bin/claude
+chown -R claude:claude /project/home/.local
+
 # git safe directory
 gosu claude git config --global --add safe.directory '*'
