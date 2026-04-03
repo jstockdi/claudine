@@ -11,6 +11,9 @@ if [ -S /var/run/docker.sock ]; then
     usermod -aG "${DOCKER_GROUP_NAME}" claude
 fi
 
+# Ensure ~/.local/bin is on PATH for all shell types
+export PATH="/project/home/.local/bin:$PATH"
+
 # Drop privileges and execute the requested command (or bash if none given)
 if [ $# -eq 0 ]; then
     exec gosu claude bash
