@@ -10,8 +10,15 @@ pub struct GlobalConfig {
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub struct ProjectConfig {
-    pub project: ProjectInfo,
+    pub repos: Vec<RepoConfig>,
     pub image: Option<ImageConfig>,
+}
+
+#[derive(Deserialize, Serialize, Debug, Clone)]
+pub struct RepoConfig {
+    pub url: String,
+    pub dir: String,
+    pub branch: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -19,10 +26,17 @@ pub struct ImageConfig {
     pub name: String,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone)]
-pub struct ProjectInfo {
-    pub repo_url: String,
-    pub branch: Option<String>,
+/// Legacy config format for migration support.
+#[derive(Deserialize)]
+struct LegacyProjectConfig {
+    project: LegacyProjectInfo,
+    image: Option<ImageConfig>,
+}
+
+#[derive(Deserialize)]
+struct LegacyProjectInfo {
+    repo_url: String,
+    branch: Option<String>,
 }
 
 impl Default for GlobalConfig {
@@ -33,6 +47,54 @@ impl Default for GlobalConfig {
             },
         }
     }
+}
+
+/// Extract a directory name from a git URL.
+///
+/// Strips `.git` suffix and takes the last path segment.
+///
+/// Examples:
+/// - `git@github.com:acme/frontend.git` -> `frontend`
+/// - `https://github.com/acme/backend.git` -> `backend`
+/// - `https://github.com/acme/my.dotted.repo.git` -> `my.dotted.repo`
+pub fn repo_dir_from_url(url: &str) -> String {
+    let url = url.trim().trim_end_matches('/');
+
+    // Strip .git suffix
+    let url = url.strip_suffix(".git").unwrap_or(url);
+
+    // For SSH URLs like git@github.com:acme/frontend, split on ':' then '/'
+    // For HTTPS URLs like https://github.com/acme/backend, split on '/'
+    let last_segment = if let Some(after_colon) = url.rsplit_once(':') {
+        // SSH-style URL — take the part after the colon, then the last path segment
+        after_colon
+            .1
+            .rsplit_once('/')
+            .map(|(_, name)| name)
+            .unwrap_or(after_colon.1)
+    } else {
+        // HTTPS-style or plain path — take the last path segment
+        url.rsplit_once('/')
+            .map(|(_, name)| name)
+            .unwrap_or(url)
+    };
+
+    last_segment.to_string()
+}
+
+/// Attempt to migrate a legacy `[project]` format config to the new `[[repos]]` format.
+fn migrate_project_config(raw: &str) -> Option<ProjectConfig> {
+    let legacy: LegacyProjectConfig = toml::from_str(raw).ok()?;
+    let dir = repo_dir_from_url(&legacy.project.repo_url);
+
+    Some(ProjectConfig {
+        repos: vec![RepoConfig {
+            url: legacy.project.repo_url,
+            dir,
+            branch: legacy.project.branch,
+        }],
+        image: legacy.image,
+    })
 }
 
 /// Return the base configuration directory: `~/.config/claudine/`.
@@ -70,7 +132,10 @@ pub fn load_global() -> anyhow::Result<GlobalConfig> {
 }
 
 /// Load a project config from `~/.config/claudine/projects/<name>/config.toml`.
-/// Returns an error if the project config does not exist.
+///
+/// Tries the new `[[repos]]` format first. If that fails, attempts to migrate
+/// from the legacy `[project]` format. On successful migration, saves the config
+/// in the new format.
 pub fn load_project(name: &str) -> anyhow::Result<ProjectConfig> {
     let path = config_dir()?.join("projects").join(name).join("config.toml");
 
@@ -84,10 +149,20 @@ pub fn load_project(name: &str) -> anyhow::Result<ProjectConfig> {
 
     let content = fs::read_to_string(&path)
         .with_context(|| format!("Failed to read project config: {}", path.display()))?;
-    let config: ProjectConfig = toml::from_str(&content)
-        .with_context(|| format!("Failed to parse project config: {}", path.display()))?;
 
-    Ok(config)
+    // Try the new format first
+    if let Ok(config) = toml::from_str::<ProjectConfig>(&content) {
+        return Ok(config);
+    }
+
+    // Fall back to legacy migration
+    if let Some(migrated) = migrate_project_config(&content) {
+        // Save the migrated config so future loads use the new format
+        save_project(name, &migrated)?;
+        return Ok(migrated);
+    }
+
+    anyhow::bail!("Failed to parse project config: {}", path.display());
 }
 
 /// Save a project config to `~/.config/claudine/projects/<name>/config.toml`.
@@ -157,10 +232,11 @@ mod tests {
     fn resolve_image_uses_project_override() {
         let global = GlobalConfig::default();
         let project = ProjectConfig {
-            project: ProjectInfo {
-                repo_url: "https://example.com/repo.git".to_string(),
+            repos: vec![RepoConfig {
+                url: "https://example.com/repo.git".to_string(),
+                dir: "repo".to_string(),
                 branch: None,
-            },
+            }],
             image: Some(ImageConfig {
                 name: "custom:latest".to_string(),
             }),
@@ -172,10 +248,11 @@ mod tests {
     fn resolve_image_falls_back_to_global() {
         let global = GlobalConfig::default();
         let project = ProjectConfig {
-            project: ProjectInfo {
-                repo_url: "https://example.com/repo.git".to_string(),
+            repos: vec![RepoConfig {
+                url: "https://example.com/repo.git".to_string(),
+                dir: "repo".to_string(),
                 branch: None,
-            },
+            }],
             image: None,
         };
         assert_eq!(resolve_image(&project, &global), "claudine:latest");
@@ -184,16 +261,113 @@ mod tests {
     #[test]
     fn project_config_roundtrip() {
         let config = ProjectConfig {
-            project: ProjectInfo {
-                repo_url: "git@github.com:user/repo.git".to_string(),
-                branch: Some("main".to_string()),
-            },
+            repos: vec![
+                RepoConfig {
+                    url: "git@github.com:user/repo.git".to_string(),
+                    dir: "repo".to_string(),
+                    branch: Some("main".to_string()),
+                },
+                RepoConfig {
+                    url: "https://github.com/user/backend.git".to_string(),
+                    dir: "backend".to_string(),
+                    branch: None,
+                },
+            ],
             image: None,
         };
         let serialized = toml::to_string_pretty(&config).unwrap();
         let deserialized: ProjectConfig = toml::from_str(&serialized).unwrap();
-        assert_eq!(deserialized.project.repo_url, "git@github.com:user/repo.git");
-        assert_eq!(deserialized.project.branch.as_deref(), Some("main"));
+        assert_eq!(deserialized.repos.len(), 2);
+        assert_eq!(deserialized.repos[0].url, "git@github.com:user/repo.git");
+        assert_eq!(deserialized.repos[0].dir, "repo");
+        assert_eq!(deserialized.repos[0].branch.as_deref(), Some("main"));
+        assert_eq!(
+            deserialized.repos[1].url,
+            "https://github.com/user/backend.git"
+        );
+        assert_eq!(deserialized.repos[1].dir, "backend");
+        assert!(deserialized.repos[1].branch.is_none());
         assert!(deserialized.image.is_none());
+    }
+
+    #[test]
+    fn repo_dir_from_ssh_url() {
+        assert_eq!(
+            repo_dir_from_url("git@github.com:acme/frontend.git"),
+            "frontend"
+        );
+    }
+
+    #[test]
+    fn repo_dir_from_https_url() {
+        assert_eq!(
+            repo_dir_from_url("https://github.com/acme/backend.git"),
+            "backend"
+        );
+    }
+
+    #[test]
+    fn repo_dir_from_dotted_url() {
+        assert_eq!(
+            repo_dir_from_url("https://github.com/acme/my.dotted.repo.git"),
+            "my.dotted.repo"
+        );
+    }
+
+    #[test]
+    fn repo_dir_from_url_no_git_suffix() {
+        assert_eq!(
+            repo_dir_from_url("https://github.com/acme/tools"),
+            "tools"
+        );
+    }
+
+    #[test]
+    fn repo_dir_from_url_trailing_slash() {
+        assert_eq!(
+            repo_dir_from_url("https://github.com/acme/tools.git/"),
+            "tools"
+        );
+    }
+
+    #[test]
+    fn migrate_legacy_config() {
+        let legacy = r#"
+[project]
+repo_url = "git@github.com:user/myrepo.git"
+branch = "develop"
+"#;
+        let migrated = migrate_project_config(legacy).unwrap();
+        assert_eq!(migrated.repos.len(), 1);
+        assert_eq!(migrated.repos[0].url, "git@github.com:user/myrepo.git");
+        assert_eq!(migrated.repos[0].dir, "myrepo");
+        assert_eq!(migrated.repos[0].branch.as_deref(), Some("develop"));
+        assert!(migrated.image.is_none());
+    }
+
+    #[test]
+    fn migrate_legacy_config_with_image() {
+        let legacy = r#"
+[project]
+repo_url = "https://github.com/org/app.git"
+
+[image]
+name = "custom:v2"
+"#;
+        let migrated = migrate_project_config(legacy).unwrap();
+        assert_eq!(migrated.repos.len(), 1);
+        assert_eq!(migrated.repos[0].url, "https://github.com/org/app.git");
+        assert_eq!(migrated.repos[0].dir, "app");
+        assert!(migrated.repos[0].branch.is_none());
+        assert_eq!(migrated.image.unwrap().name, "custom:v2");
+    }
+
+    #[test]
+    fn migrate_returns_none_for_invalid() {
+        let bad = r#"
+[something_else]
+key = "value"
+"#;
+        assert!(migrate_project_config(bad).is_none());
     }
 }

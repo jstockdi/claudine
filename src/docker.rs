@@ -249,7 +249,13 @@ pub fn cmd_list() -> anyhow::Result<()> {
 
     for name in &projects {
         let repo = match config::load_project(name) {
-            Ok(cfg) => cfg.project.repo_url,
+            Ok(cfg) => {
+                cfg.repos
+                    .iter()
+                    .map(|r| r.url.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            }
             Err(_) => "<config error>".to_string(),
         };
 
@@ -333,10 +339,10 @@ pub(crate) fn build_run_args(project: &str, image: &str) -> Vec<String> {
     }
 
     args.push("-w".to_string());
-    args.push("/workspace/project".to_string());
+    args.push("/project".to_string());
 
     args.push("-e".to_string());
-    args.push("HOME=/workspace/home".to_string());
+    args.push("HOME=/home".to_string());
 
     args.push("--shm-size=256m".to_string());
 

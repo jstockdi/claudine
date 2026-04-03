@@ -37,6 +37,12 @@ pub enum Command {
         project: String,
     },
 
+    /// Manage repositories in a project
+    Repo {
+        #[command(subcommand)]
+        command: RepoCommand,
+    },
+
     /// Build the claudine Docker image
     Build,
 
@@ -47,5 +53,34 @@ pub enum Command {
     Completions {
         /// Shell to generate completions for
         shell: clap_complete::Shell,
+    },
+}
+
+#[derive(Subcommand)]
+pub enum RepoCommand {
+    /// Add a repository to a project
+    Add {
+        /// Project name
+        project: String,
+        /// Repository URL
+        url: String,
+        /// Directory name (defaults to repo name)
+        #[arg(short, long)]
+        dir: Option<String>,
+        /// Branch to clone
+        #[arg(short, long)]
+        branch: Option<String>,
+    },
+    /// Remove a repository from a project
+    Remove {
+        /// Project name
+        project: String,
+        /// Directory name of the repo to remove
+        dir: String,
+    },
+    /// List repositories in a project
+    List {
+        /// Project name
+        project: String,
     },
 }

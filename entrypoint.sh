@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Set HOME to the persistent workspace home directory
-export HOME=/workspace/home
-
 # Ensure workspace directories exist with correct ownership
 mkdir -p /workspace/home /workspace/project
 chown claude:claude /workspace/home /workspace/project
 chown -R claude:claude /workspace/home
+
+# Create root-level symlinks for clean paths
+ln -sfn /workspace/home /home
+ln -sfn /workspace/project /project
+
+# Set HOME to the symlinked path
+export HOME=/home
 
 # Copy host configs into the workspace home directory
 if [ -d /host-config ]; then

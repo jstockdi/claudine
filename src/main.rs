@@ -3,6 +3,7 @@ mod config;
 mod docker;
 mod init;
 mod project;
+mod repo;
 
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
@@ -18,6 +19,7 @@ fn main() -> anyhow::Result<()> {
         Command::Shell { project } => docker::cmd_shell(&project),
         Command::Destroy { project } => docker::cmd_destroy(&project),
         Command::List => docker::cmd_list(),
+        Command::Repo { command } => repo::cmd_repo(command),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();
             generate(shell, &mut cmd, "claudine", &mut std::io::stdout());

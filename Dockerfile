@@ -34,8 +34,11 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
     && cp /root/.local/bin/claude /usr/local/bin/claude \
     && chmod 755 /usr/local/bin/claude
 
-# Create non-root user with home directory pointing to the persistent workspace
-RUN useradd -d /workspace/home -s /bin/bash claude
+# Remove default /home so the entrypoint can symlink it to the persistent volume
+RUN rm -rf /home
+
+# Create non-root user with home at /home (symlinked to /workspace/home at runtime)
+RUN useradd -d /home -s /bin/bash claude
 
 # Add alias so claude always runs with --dangerously-skip-permissions
 RUN echo 'alias claude="claude --dangerously-skip-permissions"' >> /etc/bash.bashrc

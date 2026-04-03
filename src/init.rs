@@ -7,8 +7,8 @@ use crate::{config, project};
 
 /// Run the interactive project initialization flow.
 ///
-/// Prompts the user for a repository URL and optional branch, creates a Docker
-/// volume, saves the project config, and clones the repository into the volume.
+/// Prompts the user for one or more repository URLs, creates a Docker volume,
+/// saves the project config, and clones each repository into the volume.
 pub fn cmd_init(name: &str) -> anyhow::Result<()> {
     project::validate_name(name)?;
 
@@ -28,27 +28,52 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Prompt for repository URL (required)
-    let repo_url: String = Input::new()
-        .with_prompt("Repository URL")
-        .interact_text()?;
+    // Collect repos in a loop
+    let mut repos: Vec<config::RepoConfig> = Vec::new();
 
-    if repo_url.trim().is_empty() {
-        anyhow::bail!("Repository URL cannot be empty.");
+    loop {
+        let url_input: String = Input::new()
+            .with_prompt("Repository URL (leave empty to finish)")
+            .default(String::new())
+            .show_default(false)
+            .interact_text()?;
+
+        if url_input.trim().is_empty() {
+            if repos.is_empty() {
+                anyhow::bail!("At least one repository is required.");
+            }
+            break;
+        }
+
+        let url = url_input.trim().to_string();
+        let default_dir = config::repo_dir_from_url(&url);
+
+        let dir_input: String = Input::new()
+            .with_prompt(format!("Directory name [{}]", default_dir))
+            .default(default_dir.clone())
+            .show_default(false)
+            .interact_text()?;
+
+        let dir = if dir_input.trim().is_empty() {
+            default_dir
+        } else {
+            dir_input.trim().to_string()
+        };
+
+        let branch_input: String = Input::new()
+            .with_prompt("Branch (leave empty for default)")
+            .default(String::new())
+            .show_default(false)
+            .interact_text()?;
+
+        let branch = if branch_input.trim().is_empty() {
+            None
+        } else {
+            Some(branch_input.trim().to_string())
+        };
+
+        repos.push(config::RepoConfig { url, dir, branch });
     }
-
-    // Prompt for branch (optional)
-    let branch_input: String = Input::new()
-        .with_prompt("Branch (leave empty for default)")
-        .default(String::new())
-        .show_default(false)
-        .interact_text()?;
-
-    let branch = if branch_input.trim().is_empty() {
-        None
-    } else {
-        Some(branch_input.trim().to_string())
-    };
 
     // Create volume if it does not already exist
     if !volume_already_exists {
@@ -58,10 +83,7 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
 
     // Build and save project config
     let project_config = config::ProjectConfig {
-        project: config::ProjectInfo {
-            repo_url: repo_url.clone(),
-            branch: branch.clone(),
-        },
+        repos: repos.clone(),
         image: None,
     };
     config::save_project(name, &project_config)?;
@@ -70,12 +92,26 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
 
-    // Build docker run args for the clone operation
+    // Clone each repo
+    for repo in &repos {
+        clone_repo(name, &image, repo)?;
+    }
+
+    println!("Project '{}' initialized successfully.", name);
+    Ok(())
+}
+
+/// Clone a single repository into the project volume.
+pub fn clone_repo(
+    project_name: &str,
+    image: &str,
+    repo: &config::RepoConfig,
+) -> anyhow::Result<()> {
     let mut args: Vec<String> = vec![
         "run".to_string(),
         "--rm".to_string(),
         "-v".to_string(),
-        format!("{}:/workspace", project::volume_name(name)),
+        format!("{}:/workspace", project::volume_name(project_name)),
     ];
 
     // Mount host gitconfig if it exists
@@ -98,21 +134,22 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
     }
 
     // Image name
-    args.push(image);
+    args.push(image.to_string());
 
-    // Clone command
+    // Clone command — clone into /workspace/project/<dir>
+    let clone_target = format!("/workspace/project/{}", repo.dir);
     let mut clone_cmd = vec!["git".to_string(), "clone".to_string()];
-    if let Some(ref b) = branch {
+    if let Some(ref b) = repo.branch {
         clone_cmd.push("--branch".to_string());
         clone_cmd.push(b.clone());
     }
-    clone_cmd.push(repo_url);
-    clone_cmd.push("/workspace/project".to_string());
+    clone_cmd.push(repo.url.clone());
+    clone_cmd.push(clone_target);
 
     args.extend(clone_cmd);
 
     // Run the clone
-    println!("Cloning repository into volume...");
+    println!("Cloning {}...", repo.dir);
     let status = Command::new("docker")
         .args(&args)
         .stdout(std::process::Stdio::inherit())
@@ -122,15 +159,13 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
 
     if !status.success() {
         eprintln!(
-            "Clone failed (exit code: {}). The volume has been kept — \
-             you can fix the issue and run 'claudine init {}' again.",
-            status,
-            name
+            "Clone of '{}' failed (exit code: {}). The volume has been kept — \
+             you can fix the issue and try again.",
+            repo.url, status,
         );
-        anyhow::bail!("Repository clone failed.");
+        anyhow::bail!("Repository clone failed for '{}'.", repo.url);
     }
 
-    println!("Project '{}' initialized successfully.", name);
     Ok(())
 }
 
