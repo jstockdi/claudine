@@ -7,6 +7,9 @@ pub struct Plugin {
     pub description: &'static str,
     /// Plugin names that satisfy a dependency. At least ONE must be present.
     pub requires: &'static [&'static str],
+    /// If true, this plugin needs Rust to compile from source.
+    /// The Dockerfile generator will install/remove Rust around compiled plugins.
+    pub compiled: bool,
     pub dockerfile: &'static str,
 }
 
@@ -17,42 +20,49 @@ pub fn catalog() -> Vec<Plugin> {
             name: "node-20",
             description: "Node.js 20.x LTS",
             requires: &[],
+            compiled: false,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/*",
         },
         Plugin {
             name: "node-22",
             description: "Node.js 22.x LTS",
             requires: &[],
+            compiled: false,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/*",
         },
         Plugin {
             name: "node-24",
             description: "Node.js 24.x",
             requires: &[],
+            compiled: false,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/*",
         },
         Plugin {
             name: "heroku",
             description: "Heroku CLI",
             requires: &["node-20", "node-22", "node-24"],
+            compiled: false,
             dockerfile: "RUN curl https://cli-assets.heroku.com/install.sh | sh",
         },
         Plugin {
             name: "python-venv",
             description: "Python 3 virtual environment support",
             requires: &[],
+            compiled: false,
             dockerfile: "RUN apt-get update && apt-get install -y python3-venv \\\n    && rm -rf /var/lib/apt/lists/*",
         },
         Plugin {
             name: "rust",
-            description: "Rust toolchain via rustup",
+            description: "Rust toolchain (persistent, available at runtime)",
             requires: &[],
+            compiled: false,
             dockerfile: "RUN apt-get update && apt-get install -y build-essential \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \\\n    && echo 'source /root/.cargo/env' >> /etc/bash.bashrc",
         },
         Plugin {
             name: "lin",
             description: "Fast CLI for Linear (built from source)",
-            requires: &["rust"],
+            requires: &[],
+            compiled: true,
             dockerfile: "RUN . /root/.cargo/env \\\n    && git clone https://github.com/sprouted-dev/lin.git /tmp/lin \\\n    && cd /tmp/lin \\\n    && cargo build --release \\\n    && cp target/release/lin /usr/local/bin/lin \\\n    && chmod 755 /usr/local/bin/lin \\\n    && rm -rf /tmp/lin",
         },
     ]
@@ -113,12 +123,38 @@ pub fn generate_dockerfile(plugins: &[String]) -> anyhow::Result<String> {
         }
     }
 
+    let has_compiled = ordered.iter().any(|p| p.compiled);
+    let has_rust_plugin = plugins.iter().any(|n| n == "rust");
+
     let mut lines = vec!["FROM claudine:latest".to_string()];
 
-    for plugin in &ordered {
+    // Non-compiled plugins first
+    for plugin in ordered.iter().filter(|p| !p.compiled) {
         lines.push(String::new());
         lines.push(format!("# Plugin: {}", plugin.name));
         lines.push(plugin.dockerfile.to_string());
+    }
+
+    // If there are compiled plugins, install Rust build tools (unless rust plugin is already present)
+    let compiled: Vec<_> = ordered.iter().filter(|p| p.compiled).collect();
+    if !compiled.is_empty() && !has_rust_plugin {
+        lines.push(String::new());
+        lines.push("# Build phase: install Rust toolchain".to_string());
+        lines.push("RUN apt-get update && apt-get install -y build-essential \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y".to_string());
+    }
+
+    // Compiled plugins
+    for plugin in &compiled {
+        lines.push(String::new());
+        lines.push(format!("# Plugin: {}", plugin.name));
+        lines.push(plugin.dockerfile.to_string());
+    }
+
+    // Clean up Rust if we installed it just for building (not the rust plugin)
+    if has_compiled && !has_rust_plugin {
+        lines.push(String::new());
+        lines.push("# Cleanup: remove Rust build toolchain".to_string());
+        lines.push("RUN rm -rf /root/.cargo /root/.rustup \\\n    && apt-get purge -y build-essential && apt-get autoremove -y \\\n    && rm -rf /var/lib/apt/lists/*".to_string());
     }
 
     // Trailing newline
