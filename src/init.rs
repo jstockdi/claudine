@@ -98,6 +98,14 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
         project::create_volume(name)?;
     }
 
+    // Create shared directory on the host
+    let share_dir = project::share_dir(name)?;
+    if !share_dir.exists() {
+        std::fs::create_dir_all(&share_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to create share directory '{}': {e}", share_dir.display()))?;
+        println!("Created share directory: {}", share_dir.display());
+    }
+
     // Build and save project config
     let project_config = config::ProjectConfig {
         repos: repos.clone(),

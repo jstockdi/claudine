@@ -314,6 +314,14 @@ pub(crate) fn build_run_args(project: &str, image: &str, repo: Option<&str>) -> 
         "/var/run/docker.sock:/var/run/docker.sock".to_string(),
     ];
 
+    // Mount the shared directory if it exists
+    if let Ok(share) = project::share_dir(project) {
+        if share.exists() {
+            args.push("-v".to_string());
+            args.push(format!("{}:/share", share.display()));
+        }
+    }
+
     args.push("-w".to_string());
     match repo {
         Some(r) => args.push(format!("/project/{}", r)),
