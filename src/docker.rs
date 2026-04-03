@@ -79,14 +79,6 @@ pub fn cmd_run(project: &str, repo: Option<&str>, extra_args: &[String]) -> anyh
         );
     }
 
-    if project::container_running(project)? {
-        anyhow::bail!(
-            "Project '{}' is already running. Use 'claudine shell {}' to open another terminal.",
-            project,
-            project
-        );
-    }
-
     let project_config = config::load_project(project)?;
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
@@ -134,29 +126,6 @@ pub fn cmd_shell(project: &str, repo: Option<&str>) -> anyhow::Result<()> {
         );
     }
 
-    if project::container_running(project)? {
-        // Attach to the running container via docker exec
-        let mut cmd = Command::new("docker");
-        cmd.arg("exec");
-
-        if std::io::stdin().is_terminal() {
-            cmd.arg("-it");
-        }
-
-        // Set working directory if repo specified
-        if let Some(r) = repo {
-            cmd.args(["-w", &format!("/project/{}", r)]);
-        }
-
-        cmd.arg(project::container_name(project));
-        cmd.arg("bash");
-
-        use std::os::unix::process::CommandExt;
-        let err = cmd.exec();
-        return Err(anyhow::anyhow!("Failed to exec docker: {}", err));
-    }
-
-    // No running container — start a fresh one with bash (no command argument)
     let project_config = config::load_project(project)?;
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
@@ -165,7 +134,6 @@ pub fn cmd_shell(project: &str, repo: Option<&str>) -> anyhow::Result<()> {
 
     let mut cmd = Command::new("docker");
     cmd.args(&docker_args);
-    // No command argument — the entrypoint defaults to bash when no args are given
 
     use std::os::unix::process::CommandExt;
     let err = cmd.exec();
@@ -322,8 +290,6 @@ pub(crate) fn build_run_args(project: &str, image: &str, repo: Option<&str>) -> 
     let mut args = vec![
         "run".to_string(),
         "--rm".to_string(),
-        "--name".to_string(),
-        project::container_name(project),
         "-v".to_string(),
         format!("{}:/workspace", project::volume_name(project)),
         "-v".to_string(),
