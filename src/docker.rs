@@ -105,7 +105,7 @@ pub fn cmd_build_project(project: &str, dockerfile_content: &str) -> anyhow::Res
 pub fn cmd_run(project: &str, repo: Option<&str>, extra_args: &[String]) -> anyhow::Result<()> {
     validate_project(project, repo)?;
 
-    let mut container_cmd: Vec<String> = vec!["claude".to_string()];
+    let mut container_cmd: Vec<String> = vec!["claude".to_string(), "--dangerously-skip-permissions".to_string()];
     container_cmd.extend_from_slice(extra_args);
 
     exec_in_project(project, repo, &container_cmd)
