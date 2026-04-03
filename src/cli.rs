@@ -49,6 +49,12 @@ pub enum Command {
         command: RepoCommand,
     },
 
+    /// Manage plugins for a project
+    Plugin {
+        #[command(subcommand)]
+        command: PluginCommand,
+    },
+
     /// Build the claudine Docker image
     Build,
 
@@ -60,6 +66,31 @@ pub enum Command {
         /// Shell to generate completions for
         shell: clap_complete::Shell,
     },
+}
+
+#[derive(Subcommand)]
+pub enum PluginCommand {
+    /// Add a plugin to a project
+    Add {
+        /// Project name
+        project: String,
+        /// Plugin name
+        plugin: String,
+    },
+    /// Remove a plugin from a project
+    Remove {
+        /// Project name
+        project: String,
+        /// Plugin name
+        plugin: String,
+    },
+    /// List plugins installed in a project
+    List {
+        /// Project name
+        project: String,
+    },
+    /// Show all available plugins
+    Available,
 }
 
 #[derive(Subcommand)]

@@ -2,12 +2,13 @@ mod cli;
 mod config;
 mod docker;
 mod init;
+mod plugin;
 mod project;
 mod repo;
 
 use clap::{CommandFactory, Parser};
 use clap_complete::generate;
-use cli::{Cli, Command};
+use cli::{Cli, Command, PluginCommand};
 
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
@@ -19,6 +20,12 @@ fn main() -> anyhow::Result<()> {
         Command::Shell { project, repo } => docker::cmd_shell(&project, repo.as_deref()),
         Command::Destroy { project } => docker::cmd_destroy(&project),
         Command::List => docker::cmd_list(),
+        Command::Plugin { command } => match command {
+            PluginCommand::Add { project, plugin } => plugin::cmd_plugin_add(&project, &plugin),
+            PluginCommand::Remove { project, plugin } => plugin::cmd_plugin_remove(&project, &plugin),
+            PluginCommand::List { project } => plugin::cmd_plugin_list(&project),
+            PluginCommand::Available => plugin::cmd_plugin_available(),
+        },
         Command::Repo { command } => repo::cmd_repo(command),
         Command::Completions { shell } => {
             let mut cmd = Cli::command();

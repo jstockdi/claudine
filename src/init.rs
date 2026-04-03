@@ -114,6 +114,7 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
     let project_config = config::ProjectConfig {
         repos: repos.clone(),
         ssh_key: ssh_key.clone(),
+        plugins: None,
         image: None,
     };
     config::save_project(name, &project_config)?;

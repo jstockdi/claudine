@@ -64,6 +64,40 @@ pub fn cmd_build() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Build a project-specific Docker image from a generated Dockerfile.
+///
+/// Writes the Dockerfile content to a temporary directory and runs
+/// `docker build -t claudine:<project>` against it.
+pub fn cmd_build_project(project: &str, dockerfile_content: &str) -> anyhow::Result<()> {
+    check_docker()?;
+
+    let tmp = tempfile::tempdir()
+        .map_err(|e| anyhow::anyhow!("Failed to create temporary directory: {e}"))?;
+
+    let dockerfile_path = tmp.path().join("Dockerfile");
+    let mut f = std::fs::File::create(&dockerfile_path)
+        .map_err(|e| anyhow::anyhow!("Failed to write Dockerfile: {e}"))?;
+    f.write_all(dockerfile_content.as_bytes())?;
+
+    let tag = format!("claudine:{}", project);
+    println!("Building project image {}...", tag);
+
+    let status = Command::new("docker")
+        .args(["build", "-t", &tag])
+        .arg(tmp.path())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run 'docker build': {e}"))?;
+
+    if !status.success() {
+        anyhow::bail!("Docker build failed with exit code: {}", status);
+    }
+
+    println!("Successfully built {}", tag);
+    Ok(())
+}
+
 /// Launch Claude Code in a container for the given project.
 ///
 /// If the project container is already running, attaches via `docker exec`.

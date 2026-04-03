@@ -13,6 +13,7 @@ pub struct GlobalConfig {
 pub struct ProjectConfig {
     pub repos: Vec<RepoConfig>,
     pub ssh_key: Option<String>,
+    pub plugins: Option<Vec<String>>,
     pub image: Option<ImageConfig>,
 }
 
@@ -103,6 +104,7 @@ fn migrate_project_config(raw: &str) -> Option<ProjectConfig> {
             branch: legacy.project.branch,
         }],
         ssh_key: None,
+        plugins: None,
         image: legacy.image,
     })
 }
@@ -262,6 +264,7 @@ mod tests {
                 branch: None,
             }],
             ssh_key: None,
+            plugins: None,
             image: Some(ImageConfig {
                 name: "custom:latest".to_string(),
             }),
@@ -279,6 +282,7 @@ mod tests {
                 branch: None,
             }],
             ssh_key: None,
+            plugins: None,
             image: None,
         };
         assert_eq!(resolve_image(&project, &global), "claudine:latest");
@@ -300,6 +304,7 @@ mod tests {
                 },
             ],
             ssh_key: Some("/Users/test/.ssh/id_ed25519".to_string()),
+            plugins: None,
             image: None,
         };
         let serialized = toml::to_string_pretty(&config).unwrap();
