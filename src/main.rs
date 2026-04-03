@@ -15,7 +15,7 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Build => docker::cmd_build(),
-        Command::Init { project, ssh_key, repos } => init::cmd_init(&project, ssh_key.as_deref(), &repos),
+        Command::Init { project, ssh_key, repos, plugins } => init::cmd_init(&project, ssh_key.as_deref(), &repos, &plugins),
         Command::Run { project, repo, args } => docker::cmd_run(&project, repo.as_deref(), &args),
         Command::Shell { project, repo } => docker::cmd_shell(&project, repo.as_deref()),
         Command::Destroy { project } => docker::cmd_destroy(&project),

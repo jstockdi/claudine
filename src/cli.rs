@@ -21,6 +21,10 @@ pub enum Command {
         /// Repository URLs (repeatable, skips interactive prompt)
         #[arg(long = "repo")]
         repos: Vec<String>,
+
+        /// Plugins to install (repeatable)
+        #[arg(long = "plugin")]
+        plugins: Vec<String>,
     },
 
     /// Run Claude Code in a container for the given project

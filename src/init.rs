@@ -4,11 +4,11 @@ use std::process::Command;
 
 use dialoguer::{Confirm, Input};
 
-use crate::{config, project};
+use crate::{config, plugin, project};
 
 /// Initialize a project. If `flag_repos` are provided, runs non-interactively.
 /// Otherwise, prompts for input (requires a TTY).
-pub fn cmd_init(name: &str, flag_ssh_key: Option<&str>, flag_repos: &[String]) -> anyhow::Result<()> {
+pub fn cmd_init(name: &str, flag_ssh_key: Option<&str>, flag_repos: &[String], flag_plugins: &[String]) -> anyhow::Result<()> {
     project::validate_name(name)?;
 
     let interactive = flag_repos.is_empty();
@@ -64,6 +64,21 @@ pub fn cmd_init(name: &str, flag_ssh_key: Option<&str>, flag_repos: &[String]) -
         None
     };
 
+    // Validate plugins upfront
+    for p in flag_plugins {
+        if plugin::find(p).is_none() {
+            anyhow::bail!(
+                "Unknown plugin '{}'. Run 'claudine plugin available' to see options.",
+                p
+            );
+        }
+    }
+    // Check plugin requirements (order matters — check in order they're given)
+    for (i, p) in flag_plugins.iter().enumerate() {
+        let installed_so_far: Vec<String> = flag_plugins[..i].to_vec();
+        plugin::check_requires(p, &installed_so_far)?;
+    }
+
     // Collect repos
     let repos = if interactive {
         collect_repos_interactive()?
@@ -86,11 +101,21 @@ pub fn cmd_init(name: &str, flag_ssh_key: Option<&str>, flag_repos: &[String]) -
     }
 
     // Build and save project config
+    let plugins = if flag_plugins.is_empty() {
+        None
+    } else {
+        Some(flag_plugins.to_vec())
+    };
+    let image_override = if plugins.is_some() {
+        Some(config::ImageConfig { name: format!("claudine:{}", name) })
+    } else {
+        None
+    };
     let project_config = config::ProjectConfig {
         repos: repos.clone(),
         ssh_key: ssh_key.clone(),
-        plugins: None,
-        image: None,
+        plugins,
+        image: image_override,
     };
     config::save_project(name, &project_config)?;
 
@@ -105,6 +130,14 @@ pub fn cmd_init(name: &str, flag_ssh_key: Option<&str>, flag_repos: &[String]) -
     // Clone each repo
     for repo in &repos {
         clone_repo(name, &image, repo)?;
+    }
+
+    // Build project image if plugins were specified
+    if let Some(ref plugin_list) = project_config.plugins {
+        if !plugin_list.is_empty() {
+            let dockerfile = plugin::generate_dockerfile(plugin_list)?;
+            crate::docker::cmd_build_project(name, &dockerfile)?;
+        }
     }
 
     println!("Project '{}' initialized successfully.", name);
