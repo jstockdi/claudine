@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     gosu \
     git \
+    jq \
     unzip \
     openssh-client \
     python3 \
