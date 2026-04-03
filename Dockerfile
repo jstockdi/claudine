@@ -52,8 +52,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends build-essential
 # Create non-root user with home at /project/home (persistent volume)
 RUN useradd -d /project/home -s /bin/bash claude
 
-# Add alias so claude always runs with --dangerously-skip-permissions
-RUN echo 'alias claude="claude --dangerously-skip-permissions"' >> /etc/bash.bashrc
+# Add alias and ensure ~/.local/bin is on PATH for all users
+RUN echo 'alias claude="claude --dangerously-skip-permissions"' >> /etc/bash.bashrc \
+    && echo 'export PATH="$HOME/.local/bin:$PATH"' >> /etc/bash.bashrc \
+    && echo 'export PATH="$HOME/.local/bin:$PATH"' >> /etc/profile.d/local-bin.sh
 
 # Copy entrypoint script
 COPY entrypoint.sh /entrypoint.sh
