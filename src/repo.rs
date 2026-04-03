@@ -43,7 +43,12 @@ fn repo_add(
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
 
+    if url.starts_with('-') {
+        anyhow::bail!("Repository URL cannot start with '-'.");
+    }
+
     let dir = dir.unwrap_or_else(|| config::repo_dir_from_url(url));
+    project::validate_dir(&dir)?;
 
     // Check for directory name conflicts
     if project_config.repos.iter().any(|r| r.dir == dir) {

@@ -63,6 +63,9 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
         }
 
         let url = url_input.trim().to_string();
+        if url.starts_with('-') {
+            anyhow::bail!("Repository URL cannot start with '-'.");
+        }
         let default_dir = config::repo_dir_from_url(&url);
 
         let dir_input: String = Input::new()
@@ -76,6 +79,7 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
         } else {
             dir_input.trim().to_string()
         };
+        project::validate_dir(&dir)?;
 
         let branch_input: String = Input::new()
             .with_prompt("Branch (leave empty for default)")
@@ -213,6 +217,7 @@ pub fn clone_repo(
         clone_cmd.push("--branch".to_string());
         clone_cmd.push(b.clone());
     }
+    clone_cmd.push("--".to_string());
     clone_cmd.push(repo.url.clone());
     clone_cmd.push(clone_target);
 

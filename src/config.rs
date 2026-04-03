@@ -80,7 +80,14 @@ pub fn repo_dir_from_url(url: &str) -> String {
             .unwrap_or(url)
     };
 
-    last_segment.to_string()
+    let result = last_segment.to_string();
+
+    // Guard against empty or dangerous directory names
+    if result.is_empty() || result == "." || result == ".." {
+        return "repo".to_string();
+    }
+
+    result
 }
 
 /// Attempt to migrate a legacy `[project]` format config to the new `[[repos]]` format.

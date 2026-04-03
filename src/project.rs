@@ -1,32 +1,50 @@
 use std::process::Command;
 
-/// Validate that a project name is safe and well-formed.
-/// Must start with an alphanumeric character and contain only
-/// alphanumeric characters, hyphens, and underscores.
-pub fn validate_name(name: &str) -> anyhow::Result<()> {
+/// Validate that a name is safe for use as a project or directory name.
+/// Must start with an alphanumeric character, contain only alphanumeric
+/// characters, hyphens, underscores, and dots, and be at most 64 characters.
+fn validate_safe_name(name: &str, label: &str) -> anyhow::Result<()> {
     if name.is_empty() {
-        anyhow::bail!("Project name cannot be empty.");
+        anyhow::bail!("{} cannot be empty.", label);
+    }
+
+    if name.len() > 64 {
+        anyhow::bail!("{} is too long (max 64 characters).", label);
+    }
+
+    if name == "." || name == ".." || name == "home" {
+        anyhow::bail!("{} '{}' is reserved.", label, name);
     }
 
     let first = name.chars().next().unwrap();
     if !first.is_ascii_alphanumeric() {
         anyhow::bail!(
-            "Project name must start with a letter or digit, got '{}'.",
-            first
+            "{} must start with a letter or digit, got '{}'.",
+            label, first
         );
     }
 
     for ch in name.chars() {
-        if !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_' {
+        if !ch.is_ascii_alphanumeric() && ch != '-' && ch != '_' && ch != '.' {
             anyhow::bail!(
-                "Project name contains invalid character '{}'. \
-                 Only letters, digits, hyphens, and underscores are allowed.",
-                ch
+                "{} contains invalid character '{}'. \
+                 Only letters, digits, hyphens, underscores, and dots are allowed.",
+                label, ch
             );
         }
     }
 
     Ok(())
+}
+
+/// Validate a project name.
+pub fn validate_name(name: &str) -> anyhow::Result<()> {
+    validate_safe_name(name, "Project name")
+}
+
+/// Validate a repository directory name.
+pub fn validate_dir(dir: &str) -> anyhow::Result<()> {
+    validate_safe_name(dir, "Directory name")
 }
 
 /// Return the Docker volume name for a project.
@@ -113,6 +131,7 @@ mod tests {
         assert!(validate_name("myproject").is_ok());
         assert!(validate_name("my-project").is_ok());
         assert!(validate_name("my_project_2").is_ok());
+        assert!(validate_name("my.project").is_ok());
     }
 
     #[test]
@@ -121,6 +140,24 @@ mod tests {
         assert!(validate_name("my project").is_err());
         assert!(validate_name("../escape").is_err());
         assert!(validate_name(".hidden").is_err());
+        assert!(validate_name("home").is_err());
+        assert!(validate_name("a".repeat(65).as_str()).is_err());
+    }
+
+    #[test]
+    fn valid_dir_names() {
+        assert!(validate_dir("plotzy-api").is_ok());
+        assert!(validate_dir("my.dotted.repo").is_ok());
+        assert!(validate_dir("repo_v2").is_ok());
+    }
+
+    #[test]
+    fn invalid_dir_names() {
+        assert!(validate_dir("").is_err());
+        assert!(validate_dir("..").is_err());
+        assert!(validate_dir("home").is_err());
+        assert!(validate_dir("../escape").is_err());
+        assert!(validate_dir("-flag").is_err());
     }
 
     #[test]
