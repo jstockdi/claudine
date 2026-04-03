@@ -86,6 +86,13 @@ pub fn catalog() -> Vec<Plugin> {
             dockerfile: "RUN git clone https://github.com/jstockdi/glab.git /tmp/glab \\\n    && cd /tmp/glab \\\n    && make build \\\n    && cp bin/glab /usr/local/bin/glab \\\n    && chmod 755 /usr/local/bin/glab \\\n    && rm -rf /tmp/glab",
         },
         Plugin {
+            name: "aws",
+            description: "AWS CLI v2",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "RUN curl -fsSL \"https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip\" -o /tmp/awscliv2.zip \\\n    && unzip -q /tmp/awscliv2.zip -d /tmp \\\n    && /tmp/aws/install \\\n    && rm -rf /tmp/awscliv2.zip /tmp/aws",
+        },
+        Plugin {
             name: "rodney",
             description: "Chrome automation CLI (built from source, jstockdi fork)",
             requires: &[],
@@ -445,6 +452,7 @@ mod tests {
         assert!(names.contains(&"heroku"));
         assert!(names.contains(&"python-venv"));
         assert!(names.contains(&"rust"));
+        assert!(names.contains(&"aws"));
     }
 
     #[test]
