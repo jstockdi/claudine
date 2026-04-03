@@ -13,6 +13,14 @@ pub enum Command {
     Init {
         /// Name of the project to initialize
         project: String,
+
+        /// SSH key path (skips interactive prompt)
+        #[arg(long)]
+        ssh_key: Option<String>,
+
+        /// Repository URLs (repeatable, skips interactive prompt)
+        #[arg(long = "repo")]
+        repos: Vec<String>,
     },
 
     /// Run Claude Code in a container for the given project

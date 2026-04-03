@@ -1,3 +1,4 @@
+use std::io::IsTerminal;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -5,16 +6,24 @@ use dialoguer::{Confirm, Input};
 
 use crate::{config, project};
 
-/// Run the interactive project initialization flow.
-///
-/// Prompts the user for one or more repository URLs, creates a Docker volume,
-/// saves the project config, and clones each repository into the volume.
-pub fn cmd_init(name: &str) -> anyhow::Result<()> {
+/// Initialize a project. If `flag_repos` are provided, runs non-interactively.
+/// Otherwise, prompts for input (requires a TTY).
+pub fn cmd_init(name: &str, flag_ssh_key: Option<&str>, flag_repos: &[String]) -> anyhow::Result<()> {
     project::validate_name(name)?;
+
+    let interactive = flag_repos.is_empty();
+
+    if interactive && !std::io::stdin().is_terminal() {
+        anyhow::bail!(
+            "No TTY detected. Use --repo and --ssh-key flags for non-interactive init.\n\
+             Example: claudine init {} --ssh-key ~/.ssh/id_rsa --repo git@github.com:user/repo.git",
+            name
+        );
+    }
 
     // Check if volume already exists
     let volume_already_exists = project::volume_exists(name)?;
-    if volume_already_exists {
+    if volume_already_exists && interactive {
         let proceed = Confirm::new()
             .with_prompt(format!(
                 "Volume already exists for '{}'. Re-initialize? This will not delete existing data.",
@@ -28,25 +37,83 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Prompt for SSH key
-    let ssh_key_input: String = Input::new()
-        .with_prompt("SSH key path (leave empty for HTTPS repos)")
-        .default(String::new())
-        .show_default(false)
-        .interact_text()?;
-
-    let ssh_key = if ssh_key_input.trim().is_empty() {
-        None
-    } else {
-        let path = PathBuf::from(ssh_key_input.trim());
+    // Resolve SSH key
+    let ssh_key = if let Some(key) = flag_ssh_key {
+        let path = PathBuf::from(key);
         if !path.exists() {
             anyhow::bail!("SSH key not found: {}", path.display());
         }
         Some(path.display().to_string())
+    } else if interactive {
+        let ssh_key_input: String = Input::new()
+            .with_prompt("SSH key path (leave empty for HTTPS repos)")
+            .default(String::new())
+            .show_default(false)
+            .interact_text()?;
+
+        if ssh_key_input.trim().is_empty() {
+            None
+        } else {
+            let path = PathBuf::from(ssh_key_input.trim());
+            if !path.exists() {
+                anyhow::bail!("SSH key not found: {}", path.display());
+            }
+            Some(path.display().to_string())
+        }
+    } else {
+        None
     };
 
-    // Collect repos in a loop
-    let mut repos: Vec<config::RepoConfig> = Vec::new();
+    // Collect repos
+    let repos = if interactive {
+        collect_repos_interactive()?
+    } else {
+        collect_repos_from_flags(flag_repos)?
+    };
+
+    // Create volume if it does not already exist
+    if !volume_already_exists {
+        println!("Creating volume '{}'...", project::volume_name(name));
+        project::create_volume(name)?;
+    }
+
+    // Create shared directory on the host
+    let share_dir = project::share_dir(name)?;
+    if !share_dir.exists() {
+        std::fs::create_dir_all(&share_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to create share directory '{}': {e}", share_dir.display()))?;
+        println!("Created share directory: {}", share_dir.display());
+    }
+
+    // Build and save project config
+    let project_config = config::ProjectConfig {
+        repos: repos.clone(),
+        ssh_key: ssh_key.clone(),
+        plugins: None,
+        image: None,
+    };
+    config::save_project(name, &project_config)?;
+
+    // Resolve the image name from global config
+    let global_config = config::load_global()?;
+    let image = config::resolve_image(&project_config, &global_config);
+
+    // Set up home directory with configs, credentials, and settings
+    println!("Setting up home directory...");
+    setup_home(name, &image, ssh_key.as_deref())?;
+
+    // Clone each repo
+    for repo in &repos {
+        clone_repo(name, &image, repo)?;
+    }
+
+    println!("Project '{}' initialized successfully.", name);
+    Ok(())
+}
+
+/// Collect repos interactively via dialoguer prompts.
+fn collect_repos_interactive() -> anyhow::Result<Vec<config::RepoConfig>> {
+    let mut repos = Vec::new();
 
     loop {
         let url_input: String = Input::new()
@@ -96,44 +163,30 @@ pub fn cmd_init(name: &str) -> anyhow::Result<()> {
         repos.push(config::RepoConfig { url, dir, branch });
     }
 
-    // Create volume if it does not already exist
-    if !volume_already_exists {
-        println!("Creating volume '{}'...", project::volume_name(name));
-        project::create_volume(name)?;
+    Ok(repos)
+}
+
+/// Build repo configs from CLI flags. Dir is derived from URL, branch is always default.
+fn collect_repos_from_flags(urls: &[String]) -> anyhow::Result<Vec<config::RepoConfig>> {
+    if urls.is_empty() {
+        anyhow::bail!("At least one --repo is required.");
     }
 
-    // Create shared directory on the host
-    let share_dir = project::share_dir(name)?;
-    if !share_dir.exists() {
-        std::fs::create_dir_all(&share_dir)
-            .map_err(|e| anyhow::anyhow!("Failed to create share directory '{}': {e}", share_dir.display()))?;
-        println!("Created share directory: {}", share_dir.display());
+    let mut repos = Vec::new();
+    for url in urls {
+        if url.starts_with('-') {
+            anyhow::bail!("Repository URL cannot start with '-'.");
+        }
+        let dir = config::repo_dir_from_url(url);
+        project::validate_dir(&dir)?;
+        repos.push(config::RepoConfig {
+            url: url.clone(),
+            dir,
+            branch: None,
+        });
     }
 
-    // Build and save project config
-    let project_config = config::ProjectConfig {
-        repos: repos.clone(),
-        ssh_key: ssh_key.clone(),
-        plugins: None,
-        image: None,
-    };
-    config::save_project(name, &project_config)?;
-
-    // Resolve the image name from global config
-    let global_config = config::load_global()?;
-    let image = config::resolve_image(&project_config, &global_config);
-
-    // Set up home directory with configs, credentials, and settings
-    println!("Setting up home directory...");
-    setup_home(name, &image, ssh_key.as_deref())?;
-
-    // Clone each repo
-    for repo in &repos {
-        clone_repo(name, &image, repo)?;
-    }
-
-    println!("Project '{}' initialized successfully.", name);
-    Ok(())
+    Ok(repos)
 }
 
 const SETUP_HOME_SCRIPT: &str = include_str!("../setup-home.sh");
