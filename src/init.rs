@@ -96,7 +96,7 @@ const AGENT_PROMPT: &str = include_str!("../agent-init-prompt.md");
 
 #[derive(Deserialize)]
 struct AgentRepo {
-    url: String,
+    url: Option<String>,
     dir: String,
     branch: Option<String>,
 }
@@ -188,7 +188,10 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
     println!("Repos:    {}", result.repos.len());
     for repo in &result.repos {
         let branch = repo.branch.as_deref().unwrap_or("(default)");
-        println!("          {} → {} [{}]", repo.dir, repo.url, branch);
+        match &repo.url {
+            Some(url) => println!("          {} → {} [{}]", repo.dir, url, branch),
+            None => println!("          {} (local only, skipping)", repo.dir),
+        }
     }
     if plugins.is_empty() {
         println!("Plugins:  (none)");
@@ -243,14 +246,16 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
         flag_ssh_key.map(|s| s.to_string())
     };
 
-    // Convert agent repos to config repos
-    let repos: Vec<config::RepoConfig> = result.repos.into_iter().map(|r| {
-        config::RepoConfig {
-            url: r.url,
-            dir: r.dir,
-            branch: r.branch,
-        }
-    }).collect();
+    // Convert agent repos to config repos, skipping repos with no remote
+    let repos: Vec<config::RepoConfig> = result.repos.into_iter()
+        .filter_map(|r| {
+            r.url.map(|url| config::RepoConfig {
+                url,
+                dir: r.dir,
+                branch: r.branch,
+            })
+        })
+        .collect();
 
     execute_init(name, ssh_key, repos, plugins)
 }
@@ -259,19 +264,29 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
 fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
     let mut out = String::new();
 
-    // Find .git directories at root and one level deep (skip worktree .git files)
+    // Find .git directories at root and up to two levels deep (skip worktree .git files)
     let mut repos: Vec<(String, PathBuf)> = Vec::new();
     if target.join(".git").is_dir() {
         repos.push((".".to_string(), target.to_path_buf()));
     }
-    if let Ok(entries) = std::fs::read_dir(target) {
-        for entry in entries.flatten() {
-            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                let sub = entry.path();
-                if sub.join(".git").is_dir() {
-                    let name = entry.file_name().to_string_lossy().to_string();
-                    repos.push((name, sub));
-                }
+    for depth_1 in std::fs::read_dir(target).into_iter().flatten().flatten() {
+        if !depth_1.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let d1_path = depth_1.path();
+        let d1_name = depth_1.file_name().to_string_lossy().to_string();
+        if d1_path.join(".git").is_dir() {
+            repos.push((d1_name.clone(), d1_path.clone()));
+        }
+        // Check one level deeper (e.g. python/master)
+        for depth_2 in std::fs::read_dir(&d1_path).into_iter().flatten().flatten() {
+            if !depth_2.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let d2_path = depth_2.path();
+            if d2_path.join(".git").is_dir() {
+                let d2_name = depth_2.file_name().to_string_lossy().to_string();
+                repos.push((format!("{}/{}", d1_name, d2_name), d2_path));
             }
         }
     }
@@ -296,7 +311,22 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_default();
 
-        out.push_str(&format!("{}|{}|{}\n", name, remote, branch));
+        // Recent branch names (up to 10, sorted by last commit date)
+        let branches = Command::new("git")
+            .args(["-C", &path.to_string_lossy(), "branch", "--sort=-committerdate", "--format=%(refname:short)"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .lines()
+                    .take(10)
+                    .collect::<Vec<_>>()
+                    .join(",")
+            })
+            .unwrap_or_default();
+
+        out.push_str(&format!("{}|{}|{}|{}\n", name, remote, branch, branches));
     }
 
     // Collect tech stack indicators
@@ -308,17 +338,22 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
         ("Pipfile", "Pipfile"),
         ("Cargo.toml", "Cargo.toml"),
         ("go.mod", "go.mod"),
+        ("pom.xml", "pom.xml"),
+        ("build.gradle", "build.gradle"),
+        ("build.gradle.kts", "build.gradle.kts"),
+        ("flyway.toml", "flyway.toml"),
+        ("flyway.conf", "flyway.conf"),
         ("Procfile", "Procfile"),
         ("heroku.yml", "heroku.yml"),
-        ("Dockerfile", "Dockerfile"),
-        ("docker-compose.yml", "docker-compose"),
-        ("docker-compose.yaml", "docker-compose"),
         ("justfile", "justfile"),
         ("Makefile", "Makefile"),
         (".gitlab-ci.yml", ".gitlab-ci.yml"),
+        (".do/app.yaml", "digitalocean-app"),
+        ("do.yaml", "digitalocean-app"),
     ];
     let dir_indicators: &[(&str, &str)] = &[
         (".github", ".github/"),
+        (".do", ".do/"),
     ];
 
     for (name, path) in &repos {

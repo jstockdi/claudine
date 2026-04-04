@@ -91,6 +91,13 @@ pub fn catalog() -> Vec<Plugin> {
             dockerfile: "RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
         },
         Plugin {
+            name: "flyway",
+            description: "Flyway database migration CLI",
+            requires: &["java"],
+            build_tool: None,
+            dockerfile: "RUN FLYWAY_VERSION=$(curl -fsSL https://api.github.com/repos/flyway/flyway/releases/latest | grep '\"tag_name\"' | sed 's/.*\"flyway-\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz\" | tar -C /opt -xz \\\n    && ln -s /opt/flyway-${FLYWAY_VERSION}/flyway /usr/local/bin/flyway".to_string(),
+        },
+        Plugin {
             name: "lin",
             description: "Fast CLI for Linear (built from source)",
             requires: &[],
@@ -509,6 +516,7 @@ mod tests {
         assert!(names.contains(&"go"));
         assert!(names.contains(&"aws"));
         assert!(names.contains(&"java"));
+        assert!(names.contains(&"flyway"));
         assert!(names.contains(&"terraform"));
         assert!(names.contains(&"doctl"));
     }
@@ -530,5 +538,17 @@ mod tests {
         assert!(heroku.requires.contains(&"node-20"));
         assert!(heroku.requires.contains(&"node-22"));
         assert!(heroku.requires.contains(&"node-24"));
+    }
+
+    #[test]
+    fn flyway_requires_java() {
+        let flyway = find("flyway").unwrap();
+        assert!(flyway.requires.contains(&"java"));
+
+        let installed = vec![];
+        assert!(check_requires("flyway", &installed).is_err());
+
+        let installed = vec!["java".to_string()];
+        assert!(check_requires("flyway", &installed).is_ok());
     }
 }
