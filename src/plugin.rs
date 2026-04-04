@@ -88,7 +88,7 @@ pub fn catalog() -> Vec<Plugin> {
             description: "OpenJDK 21 LTS runtime",
             requires: &[],
             build_tool: None,
-            dockerfile: "RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            dockerfile: "RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main\" \\\n       > /etc/apt/sources.list.d/adoptium.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends temurin-21-jre \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
         },
         Plugin {
             name: "flyway",

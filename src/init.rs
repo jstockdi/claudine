@@ -198,7 +198,20 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
     } else {
         println!("Plugins:  {}", plugins.join(", "));
     }
-    println!("SSH:      {}", if result.ssh_key_needed { "required" } else { "not needed" });
+    let prescan_ssh_key = scan.lines()
+        .skip_while(|l| !l.starts_with("=== SSH ==="))
+        .nth(1)
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if result.ssh_key_needed {
+        if let Some(ref key) = prescan_ssh_key {
+            println!("SSH key:  {}", key);
+        } else {
+            println!("SSH:      required (no key auto-detected)");
+        }
+    } else {
+        println!("SSH:      not needed");
+    }
 
     if !result.suggested_plugins.is_empty() {
         println!("\n--- Suggested New Plugins ---");
@@ -227,9 +240,19 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
             }
             Some(key_path.display().to_string())
         } else {
-            let ssh_key_input: String = Input::new()
-                .with_prompt("SSH key path")
-                .interact_text()?;
+            // Use SSH key detected during prescan
+            let detected = prescan_ssh_key.clone();
+
+            let ssh_key_input: String = if let Some(ref key) = detected {
+                Input::new()
+                    .with_prompt("SSH key path")
+                    .default(key.clone())
+                    .interact_text()?
+            } else {
+                Input::new()
+                    .with_prompt("SSH key path")
+                    .interact_text()?
+            };
 
             let trimmed = ssh_key_input.trim();
             if trimmed.is_empty() {
@@ -258,6 +281,74 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
         .collect();
 
     execute_init(name, ssh_key, repos, plugins)
+}
+
+/// Try to detect the SSH key for a set of git remote URLs by parsing ~/.ssh/config.
+///
+/// Extracts the hostname from `git@host:...` URLs, looks for a matching Host
+/// entry in ~/.ssh/config, and returns the IdentityFile path if found. Falls
+/// back to common key filenames (~/.ssh/id_ed25519, id_rsa) if they exist.
+fn detect_ssh_key(urls: &[&str]) -> Option<String> {
+    let home = dirs::home_dir()?;
+    let ssh_config = home.join(".ssh/config");
+
+    // Extract unique SSH hostnames from git@ URLs
+    let hosts: Vec<&str> = urls.iter()
+        .filter_map(|url| {
+            url.strip_prefix("git@")
+                .and_then(|rest| rest.split(':').next())
+        })
+        .collect();
+
+    if hosts.is_empty() {
+        return None;
+    }
+
+    // Parse ~/.ssh/config for matching Host entries
+    if let Ok(contents) = std::fs::read_to_string(&ssh_config) {
+        let mut current_hosts: Vec<String> = Vec::new();
+        let mut identity_file: Option<String> = None;
+
+        for line in contents.lines() {
+            let trimmed = line.trim();
+            if let Some(rest) = trimmed.strip_prefix("Host ").or_else(|| trimmed.strip_prefix("Host\t")) {
+                // Check if the previous block matched
+                if let Some(ref key) = identity_file {
+                    if hosts.iter().any(|h| current_hosts.iter().any(|ch| ch == h)) {
+                        let expanded = key.replace("~", &home.to_string_lossy());
+                        let path = PathBuf::from(&expanded);
+                        if path.exists() {
+                            return Some(path.to_string_lossy().to_string());
+                        }
+                    }
+                }
+                current_hosts = rest.split_whitespace().map(|s| s.to_string()).collect();
+                identity_file = None;
+            } else if let Some(rest) = trimmed.strip_prefix("IdentityFile ").or_else(|| trimmed.strip_prefix("IdentityFile\t")) {
+                identity_file = Some(rest.trim().to_string());
+            }
+        }
+        // Check final block
+        if let Some(ref key) = identity_file {
+            if hosts.iter().any(|h| current_hosts.iter().any(|ch| ch == h)) {
+                let expanded = key.replace("~", &home.to_string_lossy());
+                let path = PathBuf::from(&expanded);
+                if path.exists() {
+                    return Some(path.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    // Fallback: check common key filenames
+    for name in &["id_ed25519", "id_rsa", "id_ecdsa"] {
+        let path = home.join(".ssh").join(name);
+        if path.exists() {
+            return Some(path.to_string_lossy().to_string());
+        }
+    }
+
+    None
 }
 
 /// Pre-scan a directory to collect git repo info and tech stack indicators.
@@ -293,6 +384,7 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
     repos.sort_by(|a, b| a.0.cmp(&b.0));
 
     // Collect repo info
+    let mut remotes: Vec<String> = Vec::new();
     out.push_str("=== REPOS ===\n");
     for (name, path) in &repos {
         let remote = Command::new("git")
@@ -302,6 +394,10 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
             .filter(|o| o.status.success())
             .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
             .unwrap_or_else(|| "NONE".to_string());
+
+        if remote != "NONE" {
+            remotes.push(remote.clone());
+        }
 
         let branch = Command::new("git")
             .args(["-C", &path.to_string_lossy(), "branch", "--show-current"])
@@ -362,7 +458,7 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
         for (file, label) in indicators {
             if path.join(file).is_file() {
                 let mut entry = label.to_string();
-                // Extract Node.js engine version from package.json
+                // Extract Node.js engine version and detect frontend deps
                 if *file == "package.json" {
                     if let Ok(contents) = std::fs::read_to_string(path.join(file)) {
                         if let Some(engines) = contents.find("\"node\"") {
@@ -381,6 +477,15 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
                                     }
                                 }
                             }
+                        }
+                        // Detect frontend projects
+                        const FRONTEND_DEPS: &[&str] = &[
+                            "\"react\"", "\"vue\"", "\"@angular/core\"", "\"svelte\"",
+                            "\"next\"", "\"nuxt\"", "\"gatsby\"", "\"@remix-run/",
+                            "\"vite\"", "\"webpack\"", "\"parcel\"",
+                        ];
+                        if FRONTEND_DEPS.iter().any(|dep| contents.contains(dep)) {
+                            found.push("frontend".to_string());
                         }
                     }
                 }
@@ -429,6 +534,22 @@ fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
 
     if repos.is_empty() {
         anyhow::bail!("No git repositories found in {}", target.display());
+    }
+
+    // Detect SSH key from remotes
+    let remote_refs: Vec<&str> = remotes.iter().map(|s| s.as_str()).collect();
+    if let Some(key) = detect_ssh_key(&remote_refs) {
+        out.push_str(&format!("\n=== SSH ===\n{}\n", key));
+    }
+
+    // List available plugins from catalog
+    out.push_str("\n=== PLUGINS ===\n");
+    for p in plugin::catalog() {
+        if p.requires.is_empty() {
+            out.push_str(&format!("{} — {}\n", p.name, p.description));
+        } else {
+            out.push_str(&format!("{} — {} (requires: {})\n", p.name, p.description, p.requires.join(", ")));
+        }
     }
 
     Ok(out)
@@ -579,6 +700,14 @@ fn execute_init(
     };
     config::save_project(name, &project_config)?;
 
+    // Build project image if plugins were specified (must happen before setup_home)
+    if let Some(ref plugin_list) = project_config.plugins {
+        if !plugin_list.is_empty() {
+            let dockerfile = plugin::generate_dockerfile(plugin_list)?;
+            crate::docker::cmd_build_project(name, &dockerfile)?;
+        }
+    }
+
     // Resolve the image name from global config
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
@@ -590,14 +719,6 @@ fn execute_init(
     // Clone each repo
     for repo in &repos {
         clone_repo(name, &image, repo)?;
-    }
-
-    // Build project image if plugins were specified
-    if let Some(ref plugin_list) = project_config.plugins {
-        if !plugin_list.is_empty() {
-            let dockerfile = plugin::generate_dockerfile(plugin_list)?;
-            crate::docker::cmd_build_project(name, &dockerfile)?;
-        }
     }
 
     println!("Project '{}' initialized successfully.", name);
