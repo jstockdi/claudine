@@ -226,6 +226,23 @@ pub fn generate_dockerfile(plugins: &[String]) -> anyhow::Result<String> {
     Ok(lines.join("\n"))
 }
 
+/// Rebuild a project's plugin image from its current config.
+pub fn cmd_build_project(project: &str) -> anyhow::Result<()> {
+    let project_config = config::load_project(project)?;
+
+    let plugins = project_config
+        .plugins
+        .as_ref()
+        .filter(|p| !p.is_empty())
+        .ok_or_else(|| anyhow::anyhow!("Project '{}' has no plugins installed.", project))?;
+
+    let dockerfile = generate_dockerfile(plugins)?;
+    docker::cmd_build_project(project, &dockerfile)?;
+
+    println!("Project '{}' image rebuilt.", project);
+    Ok(())
+}
+
 /// Add a plugin to a project.
 ///
 /// Validates the plugin exists, checks dependency requirements, updates the

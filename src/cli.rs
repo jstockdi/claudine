@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "claudine", version, about = "Run Claude Code in isolated Docker containers")]
+#[command(name = "claudine", version, about = "Run Claude Code in isolated Docker containers", infer_subcommands = true)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
@@ -28,6 +28,7 @@ pub enum Command {
     },
 
     /// Run Claude Code in a container for the given project
+    #[command(alias = "r")]
     Run {
         /// Name of the project to run
         project: String,
@@ -67,8 +68,11 @@ pub enum Command {
         command: PluginCommand,
     },
 
-    /// Build the claudine Docker image
-    Build,
+    /// Build the claudine Docker image (or a project's plugin image)
+    Build {
+        /// Project name (rebuilds project plugin image; omit for base image)
+        project: Option<String>,
+    },
 
     /// List all claudine projects
     List,
