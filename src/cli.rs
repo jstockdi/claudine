@@ -115,6 +115,11 @@ pub enum LayerCommand {
     },
     /// Show all available layers
     Available,
+    /// Validate a layer by building and running checks
+    Validate {
+        /// Layer name (omit to validate all)
+        layer: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]

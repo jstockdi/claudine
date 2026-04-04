@@ -27,7 +27,8 @@ claudine run myproject my-repo
 - **Host file sharing** — `~/claudine-share/<project>/` is mounted at `/share` inside the container
 - **Docker-outside-of-Docker** — Claude can run Docker commands that execute on the host daemon
 - **Security hooks** — [ward](https://github.com/jstockdi/ward) PII/secrets scanning built into Claude Code hooks
-- **Built-in plugins** — add Node.js, Heroku CLI, Rust, etc. to project images with one command
+- **Built-in layers** — add Node.js, Heroku CLI, Rust, etc. to project images with one command
+- **Post-build validation** — every layer includes smoke tests that run automatically after image builds
 
 ## Commands
 
@@ -39,25 +40,91 @@ claudine destroy <project>               Remove volume + config
 claudine repo add <project> <url>        Add a repo to a project
 claudine repo remove <project> <dir>     Remove a repo
 claudine repo list <project>             List repos in a project
-claudine plugin add <project> <name>     Add a plugin, rebuild project image
-claudine plugin remove <project> <name>  Remove a plugin, rebuild project image
-claudine plugin list <project>           List installed plugins
-claudine plugin available                Show all available plugins
+claudine layer add <project> <name>      Add a layer, rebuild + validate
+claudine layer remove <project> <name>   Remove a layer, rebuild + validate
+claudine layer list <project>            List installed layers
+claudine layer available                 Show all available layers
+claudine layer validate <layer>          Standalone build + validate a layer
 claudine build                           Build/rebuild the base Docker image
 claudine list                            List all projects
 claudine completions <shell>             Generate shell completions
 ```
 
-## Plugins
+## Layers
 
 Add project-specific tools without writing Dockerfiles:
 
 ```bash
-claudine plugin add myproject node-20    # add Node.js 20
-claudine plugin add myproject heroku     # add Heroku CLI (requires node)
+claudine layer add myproject node-20    # add Node.js 20
+claudine layer add myproject heroku     # add Heroku CLI (requires node)
 ```
 
-Available plugins: `node-20`, `node-22`, `node-24`, `heroku`, `python-venv`, `rust`
+Every `layer add`, `layer remove`, and `build <project>` automatically runs validation checks against the final image to catch installation failures and conflicts.
+
+Available layers: `node-20`, `node-22`, `node-24`, `gh`, `heroku`, `python-venv`, `rust`, `go`, `java`, `flyway`, `aws`, `terraform`, `doctl`, `lin`, `glab`, `rodney`
+
+### Standalone Validation
+
+Validate a single layer in isolation (builds a temporary image):
+
+```bash
+claudine layer validate rust             # build + validate one layer
+claudine layer validate                  # build + validate every layer
+```
+
+### Creating Layers
+
+Layers are defined in `src/layer.rs` as entries in the `catalog()` function. Each `Layer` has:
+
+| Field         | Type                     | Description                                                    |
+|---------------|--------------------------|----------------------------------------------------------------|
+| `name`        | `&str`                   | Unique identifier (lowercase, hyphenated)                      |
+| `description` | `&str`                   | One-line summary shown in `layer available`                    |
+| `requires`    | `&[&str]`                | Layers that satisfy a dependency (at least one must be present) |
+| `build_tool`  | `Option<BuildTool>`      | `Rust` or `Go` — toolchain is installed for build, then removed |
+| `dockerfile`  | `String`                 | Dockerfile snippet (`RUN`, `ENV`, etc.)                        |
+| `validate`    | `&[&str]`                | Shell commands that must exit 0 when the layer works correctly  |
+
+Example:
+
+```rust
+Layer {
+    name: "gh",
+    description: "GitHub CLI",
+    requires: &[],
+    build_tool: None,
+    dockerfile: "RUN curl -fsSL https://cli.github.com/packages/... \
+        && apt-get install -y --no-install-recommends gh \
+        && rm -rf /var/lib/apt/lists/*".to_string(),
+    validate: &["gh --version"],
+},
+```
+
+#### Best Practices
+
+1. **Always include validation commands.** Every layer must have at least one `validate` entry. The test suite enforces this (`all_layers_have_validate_commands`).
+
+2. **Validate the binary, not the install.** Use `<tool> --version` or `<tool> --help` rather than checking file paths. This catches PATH issues, missing shared libraries, and broken installs.
+
+3. **Use `ENV` for PATH and runtime variables.** Do not rely on `/etc/bash.bashrc` or `/etc/profile.d/` — these are only sourced in interactive/login shells. Containers run commands via `gosu` which is neither.
+
+   ```dockerfile
+   # Good — works in all shells
+   ENV PATH="/usr/local/cargo/bin:${PATH}"
+
+   # Bad — only works in interactive bash
+   RUN echo 'export PATH=...' >> /etc/bash.bashrc
+   ```
+
+4. **Clean up after install.** Remove package lists (`rm -rf /var/lib/apt/lists/*`) and build artifacts to keep images small.
+
+5. **Declare dependencies.** If a layer needs another (e.g., heroku needs node), add it to `requires`. The first listed dependency is used automatically during standalone validation.
+
+6. **Use `build_tool` for compile-from-source layers.** Set `build_tool: Some(BuildTool::Rust)` or `BuildTool::Go` — the Dockerfile generator installs the toolchain before your `RUN` and removes it after, so the final image stays lean.
+
+7. **Test standalone and in combination.** Run `claudine layer validate <layer>` for isolation, then `claudine build <project>` to catch conflicts between layers (port collisions, PATH shadowing, library conflicts).
+
+8. **Add an integration test.** Add a `#[test] #[ignore]` entry in `tests/layer_validate.rs` so the layer is covered by `cargo test --test layer_validate -- --ignored`.
 
 ## Container Layout
 

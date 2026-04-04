@@ -1,3 +1,5 @@
+use std::process::{Command, Stdio};
+
 use crate::{config, docker};
 
 const GO_VERSION: &str = "1.25.8";
@@ -13,6 +15,8 @@ pub struct Layer {
     /// The Dockerfile generator installs and removes the toolchain automatically.
     pub build_tool: Option<BuildTool>,
     pub dockerfile: String,
+    /// Shell commands that should exit 0 when the layer is installed correctly.
+    pub validate: &'static [&'static str],
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -30,6 +34,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && corepack enable".to_string(),
+            validate: &["node --version", "npm --version", "corepack --version"],
         },
         Layer {
             name: "node-22",
@@ -37,6 +42,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && corepack enable".to_string(),
+            validate: &["node --version", "npm --version", "corepack --version"],
         },
         Layer {
             name: "node-24",
@@ -44,6 +50,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && corepack enable".to_string(),
+            validate: &["node --version", "npm --version", "corepack --version"],
         },
         Layer {
             name: "gh",
@@ -51,6 +58,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\\n       | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" \\\n       > /etc/apt/sources.list.d/github-cli.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends gh \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            validate: &["gh --version"],
         },
         Layer {
             name: "heroku",
@@ -58,6 +66,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &["node-20", "node-22", "node-24"],
             build_tool: None,
             dockerfile: "RUN curl https://cli-assets.heroku.com/install.sh | sh".to_string(),
+            validate: &["heroku --version"],
         },
         Layer {
             name: "python-venv",
@@ -65,6 +74,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN apt-get update && apt-get install -y python3-venv \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            validate: &["python3 -m venv --help"],
         },
         Layer {
             name: "rust",
@@ -72,6 +82,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo\nRUN apt-get update && apt-get install -y build-essential \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path \\\n    && chmod -R a+rX /usr/local/rustup /usr/local/cargo \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin\nENV PATH=\"/usr/local/cargo/bin:${PATH}\"".to_string(),
+            validate: &["cargo --version", "rustc --version", "just --version"],
         },
         Layer {
             name: "go",
@@ -82,6 +93,7 @@ pub fn catalog() -> Vec<Layer> {
                 "RUN curl -fsSL https://go.dev/dl/go{ver}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xz\nENV PATH=\"/usr/local/go/bin:${{PATH}}\"",
                 ver = GO_VERSION
             ),
+            validate: &["go version"],
         },
         Layer {
             name: "java",
@@ -89,6 +101,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main\" \\\n       > /etc/apt/sources.list.d/adoptium.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends temurin-21-jre \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            validate: &["java -version"],
         },
         Layer {
             name: "flyway",
@@ -96,6 +109,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &["java"],
             build_tool: None,
             dockerfile: "RUN FLYWAY_VERSION=$(curl -fsSL https://api.github.com/repos/flyway/flyway/releases/latest | grep '\"tag_name\"' | sed 's/.*\"flyway-\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz\" | tar -C /opt -xz \\\n    && ln -s /opt/flyway-${FLYWAY_VERSION}/flyway /usr/local/bin/flyway".to_string(),
+            validate: &["flyway --version"],
         },
         Layer {
             name: "lin",
@@ -103,6 +117,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: Some(BuildTool::Rust),
             dockerfile: "RUN git clone https://github.com/sprouted-dev/lin.git /tmp/lin \\\n    && cd /tmp/lin \\\n    && cargo build --release \\\n    && cp target/release/lin /usr/local/bin/lin \\\n    && chmod 755 /usr/local/bin/lin \\\n    && rm -rf /tmp/lin".to_string(),
+            validate: &["lin --help"],
         },
         Layer {
             name: "glab",
@@ -110,6 +125,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: Some(BuildTool::Go),
             dockerfile: "RUN git clone https://github.com/jstockdi/glab.git /tmp/glab \\\n    && cd /tmp/glab \\\n    && make build \\\n    && cp bin/glab /usr/local/bin/glab \\\n    && chmod 755 /usr/local/bin/glab \\\n    && rm -rf /tmp/glab".to_string(),
+            validate: &["glab version"],
         },
         Layer {
             name: "aws",
@@ -117,6 +133,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL \"https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip\" -o /tmp/awscliv2.zip \\\n    && unzip -q /tmp/awscliv2.zip -d /tmp \\\n    && /tmp/aws/install \\\n    && rm -rf /tmp/awscliv2.zip /tmp/aws".to_string(),
+            validate: &["aws --version"],
         },
         Layer {
             name: "terraform",
@@ -124,6 +141,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com bookworm main\" \\\n       > /etc/apt/sources.list.d/hashicorp.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends terraform \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            validate: &["terraform version"],
         },
         Layer {
             name: "doctl",
@@ -131,6 +149,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN DOCTL_VERSION=$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest | grep '\"tag_name\"' | sed 's/.*\"v\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-$(dpkg --print-architecture).tar.gz\" | tar -C /usr/local/bin -xz \\\n    && chmod 755 /usr/local/bin/doctl".to_string(),
+            validate: &["doctl version"],
         },
         Layer {
             name: "rodney",
@@ -138,6 +157,7 @@ pub fn catalog() -> Vec<Layer> {
             requires: &[],
             build_tool: Some(BuildTool::Go),
             dockerfile: "RUN git clone https://github.com/jstockdi/rodney.git /tmp/rodney \\\n    && cd /tmp/rodney \\\n    && go build -o /usr/local/bin/rodney . \\\n    && chmod 755 /usr/local/bin/rodney \\\n    && rm -rf /tmp/rodney".to_string(),
+            validate: &["rodney --help"],
         },
     ]
 }
@@ -283,6 +303,9 @@ pub fn cmd_build_project(project: &str) -> anyhow::Result<()> {
     let dockerfile = generate_dockerfile(layers)?;
     docker::cmd_build_project(project, &dockerfile)?;
 
+    let image = format!("claudine:{}", project);
+    validate_image(&image, layers)?;
+
     println!("Project '{}' image rebuilt.", project);
     Ok(())
 }
@@ -323,8 +346,12 @@ pub fn cmd_layer_add(project: &str, layer: &str) -> anyhow::Result<()> {
     config::save_project(project, &project_config)?;
 
     // Generate Dockerfile and build
-    let dockerfile = generate_dockerfile(project_config.layers.as_ref().unwrap())?;
+    let layers = project_config.layers.as_ref().unwrap();
+    let dockerfile = generate_dockerfile(layers)?;
     docker::cmd_build_project(project, &dockerfile)?;
+
+    let image = format!("claudine:{}", project);
+    validate_image(&image, layers)?;
 
     println!("Layer '{}' added to project '{}'.", layer, project);
     Ok(())
@@ -375,6 +402,9 @@ pub fn cmd_layer_remove(project: &str, layer: &str) -> anyhow::Result<()> {
         let layers = project_config.layers.as_ref().unwrap();
         let dockerfile = generate_dockerfile(layers)?;
         docker::cmd_build_project(project, &dockerfile)?;
+
+        let image = format!("claudine:{}", project);
+        validate_image(&image, layers)?;
     }
 
     println!("Layer '{}' removed from project '{}'.", layer, project);
@@ -419,6 +449,155 @@ pub fn cmd_layer_available() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+/// Collect the minimal set of layers needed to validate a given layer.
+///
+/// Includes the target layer plus any required dependencies (picking the
+/// first option from `requires` recursively).
+fn collect_validation_layers(name: &str) -> anyhow::Result<Vec<String>> {
+    let layer = find(name)
+        .ok_or_else(|| anyhow::anyhow!("Unknown layer '{}'.", name))?;
+
+    let mut layers = Vec::new();
+
+    if !layer.requires.is_empty() {
+        let dep = layer.requires[0];
+        let dep_layers = collect_validation_layers(dep)?;
+        layers.extend(dep_layers);
+    }
+
+    layers.push(name.to_string());
+    Ok(layers)
+}
+
+/// Build a temporary Docker image and return its tag.
+fn build_validation_image(tag: &str, dockerfile: &str) -> anyhow::Result<()> {
+    docker::check_docker()?;
+
+    let tmp = tempfile::tempdir()?;
+    std::fs::write(tmp.path().join("Dockerfile"), dockerfile)?;
+
+    let output = Command::new("docker")
+        .args(["build", "-t", tag])
+        .arg(tmp.path())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to run 'docker build': {e}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        anyhow::bail!("Failed to build validation image:\n{}", stderr);
+    }
+
+    Ok(())
+}
+
+/// Remove a Docker image, ignoring errors.
+fn remove_image(tag: &str) {
+    let _ = Command::new("docker")
+        .args(["rmi", tag])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+}
+
+/// Run validation commands for the given layers against an existing Docker image.
+///
+/// Returns Ok if all checks pass, Err listing the failures otherwise.
+fn validate_image(image: &str, layer_names: &[String]) -> anyhow::Result<()> {
+    println!("Validating layers...");
+
+    let mut total_passed = 0;
+    let mut total_failed = 0;
+    let mut failed_layers: Vec<String> = Vec::new();
+
+    for name in layer_names {
+        let layer = match find(name) {
+            Some(l) => l,
+            None => continue,
+        };
+
+        if layer.validate.is_empty() {
+            continue;
+        }
+
+        let mut layer_ok = true;
+        for cmd in layer.validate {
+            let status = Command::new("docker")
+                .args(["run", "--rm", image, "bash", "-c", cmd])
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .status()
+                .map_err(|e| anyhow::anyhow!("Failed to run 'docker run': {e}"))?;
+
+            if status.success() {
+                println!("  PASS  {} — {}", name, cmd);
+                total_passed += 1;
+            } else {
+                println!("  FAIL  {} — {}", name, cmd);
+                total_failed += 1;
+                layer_ok = false;
+            }
+        }
+
+        if !layer_ok {
+            failed_layers.push(name.clone());
+        }
+    }
+
+    if total_failed > 0 {
+        anyhow::bail!(
+            "{} check(s) failed across layer(s): {}",
+            total_failed,
+            failed_layers.join(", "),
+        );
+    }
+
+    println!("All {} checks passed.", total_passed);
+    Ok(())
+}
+
+/// Validate a single layer by building a temporary image and running its checks.
+pub fn cmd_layer_validate(name: &str) -> anyhow::Result<()> {
+    let _layer = find(name)
+        .ok_or_else(|| anyhow::anyhow!("Unknown layer '{}'.", name))?;
+
+    let layers = collect_validation_layers(name)?;
+    let dockerfile = generate_dockerfile(&layers)?;
+    let tag = format!("claudine:validate-{}", name);
+
+    println!("Building validation image ({})...", layers.join(", "));
+    build_validation_image(&tag, &dockerfile)?;
+
+    let result = validate_image(&tag, &layers);
+    remove_image(&tag);
+    result
+}
+
+/// Validate all layers in the catalog (standalone builds).
+pub fn cmd_layer_validate_all() -> anyhow::Result<()> {
+    let cat = catalog();
+    let mut failures: Vec<String> = Vec::new();
+
+    for layer in &cat {
+        match cmd_layer_validate(layer.name) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("  {}", e);
+                failures.push(layer.name.to_string());
+            }
+        }
+        println!();
+    }
+
+    if failures.is_empty() {
+        println!("All {} layers validated.", cat.len());
+        Ok(())
+    } else {
+        anyhow::bail!("{} layer(s) failed validation: {}", failures.len(), failures.join(", "))
+    }
 }
 
 #[cfg(test)]
@@ -550,5 +729,39 @@ mod tests {
 
         let installed = vec!["java".to_string()];
         assert!(check_requires("flyway", &installed).is_ok());
+    }
+
+    #[test]
+    fn all_layers_have_validate_commands() {
+        for layer in catalog() {
+            assert!(
+                !layer.validate.is_empty(),
+                "Layer '{}' has no validation commands",
+                layer.name,
+            );
+        }
+    }
+
+    #[test]
+    fn collect_validation_layers_no_deps() {
+        let layers = collect_validation_layers("rust").unwrap();
+        assert_eq!(layers, vec!["rust"]);
+    }
+
+    #[test]
+    fn collect_validation_layers_with_deps() {
+        let layers = collect_validation_layers("heroku").unwrap();
+        assert_eq!(layers, vec!["node-20", "heroku"]);
+    }
+
+    #[test]
+    fn collect_validation_layers_transitive_deps() {
+        let layers = collect_validation_layers("flyway").unwrap();
+        assert_eq!(layers, vec!["java", "flyway"]);
+    }
+
+    #[test]
+    fn collect_validation_layers_unknown() {
+        assert!(collect_validation_layers("nope").is_err());
     }
 }
