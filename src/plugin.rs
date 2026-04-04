@@ -84,6 +84,13 @@ pub fn catalog() -> Vec<Plugin> {
             ),
         },
         Plugin {
+            name: "java",
+            description: "OpenJDK 21 LTS runtime",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "RUN apt-get update && apt-get install -y --no-install-recommends openjdk-21-jre-headless \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+        },
+        Plugin {
             name: "lin",
             description: "Fast CLI for Linear (built from source)",
             requires: &[],
@@ -103,6 +110,20 @@ pub fn catalog() -> Vec<Plugin> {
             requires: &[],
             build_tool: None,
             dockerfile: "RUN curl -fsSL \"https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip\" -o /tmp/awscliv2.zip \\\n    && unzip -q /tmp/awscliv2.zip -d /tmp \\\n    && /tmp/aws/install \\\n    && rm -rf /tmp/awscliv2.zip /tmp/aws".to_string(),
+        },
+        Plugin {
+            name: "terraform",
+            description: "Terraform CLI for infrastructure provisioning",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main\" \\\n       > /etc/apt/sources.list.d/hashicorp.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends terraform \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+        },
+        Plugin {
+            name: "doctl",
+            description: "DigitalOcean CLI",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "RUN DOCTL_VERSION=$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest | grep '\"tag_name\"' | sed 's/.*\"v\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-$(dpkg --print-architecture).tar.gz\" | tar -C /usr/local/bin -xz \\\n    && chmod 755 /usr/local/bin/doctl".to_string(),
         },
         Plugin {
             name: "rodney",
@@ -487,6 +508,9 @@ mod tests {
         assert!(names.contains(&"rust"));
         assert!(names.contains(&"go"));
         assert!(names.contains(&"aws"));
+        assert!(names.contains(&"java"));
+        assert!(names.contains(&"terraform"));
+        assert!(names.contains(&"doctl"));
     }
 
     #[test]

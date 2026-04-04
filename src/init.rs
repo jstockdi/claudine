@@ -151,10 +151,15 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
         }
     }
 
-    // Run claude -p with stream-json so we see progress in real time
-    println!("Analyzing {}...\n", agent_path);
+    // Phase 1: Fast pre-scan to gather all filesystem data
+    println!("Scanning {}...", agent_path);
+    let scan = run_prescan(&path)?;
+    println!("{}", scan);
 
-    let response_text = run_agent_claude(AGENT_PROMPT, &path)?;
+    // Phase 2: Claude interprets the pre-scan data (no tool calls needed)
+    println!("Analyzing...\n");
+    let prompt = format!("{}\n\n<prescan>\n{}\n</prescan>", AGENT_PROMPT, scan);
+    let response_text = run_agent_claude(&prompt, &path)?;
 
     // Print the full analysis
     println!("\n{}", response_text);
@@ -248,6 +253,150 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
     }).collect();
 
     execute_init(name, ssh_key, repos, plugins)
+}
+
+/// Pre-scan a directory to collect git repo info and tech stack indicators.
+fn run_prescan(target: &std::path::Path) -> anyhow::Result<String> {
+    let mut out = String::new();
+
+    // Find .git directories at root and one level deep (skip worktree .git files)
+    let mut repos: Vec<(String, PathBuf)> = Vec::new();
+    if target.join(".git").is_dir() {
+        repos.push((".".to_string(), target.to_path_buf()));
+    }
+    if let Ok(entries) = std::fs::read_dir(target) {
+        for entry in entries.flatten() {
+            if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                let sub = entry.path();
+                if sub.join(".git").is_dir() {
+                    let name = entry.file_name().to_string_lossy().to_string();
+                    repos.push((name, sub));
+                }
+            }
+        }
+    }
+    repos.sort_by(|a, b| a.0.cmp(&b.0));
+
+    // Collect repo info
+    out.push_str("=== REPOS ===\n");
+    for (name, path) in &repos {
+        let remote = Command::new("git")
+            .args(["-C", &path.to_string_lossy(), "remote", "get-url", "origin"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_else(|| "NONE".to_string());
+
+        let branch = Command::new("git")
+            .args(["-C", &path.to_string_lossy(), "branch", "--show-current"])
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+            .unwrap_or_default();
+
+        out.push_str(&format!("{}|{}|{}\n", name, remote, branch));
+    }
+
+    // Collect tech stack indicators
+    out.push_str("\n=== STACK ===\n");
+    let indicators: &[(&str, &str)] = &[
+        ("package.json", "package.json"),
+        ("pyproject.toml", "pyproject.toml"),
+        ("requirements.txt", "requirements.txt"),
+        ("Pipfile", "Pipfile"),
+        ("Cargo.toml", "Cargo.toml"),
+        ("go.mod", "go.mod"),
+        ("Procfile", "Procfile"),
+        ("heroku.yml", "heroku.yml"),
+        ("Dockerfile", "Dockerfile"),
+        ("docker-compose.yml", "docker-compose"),
+        ("docker-compose.yaml", "docker-compose"),
+        ("justfile", "justfile"),
+        ("Makefile", "Makefile"),
+        (".gitlab-ci.yml", ".gitlab-ci.yml"),
+    ];
+    let dir_indicators: &[(&str, &str)] = &[
+        (".github", ".github/"),
+    ];
+
+    for (name, path) in &repos {
+        let mut found: Vec<String> = Vec::new();
+
+        for (file, label) in indicators {
+            if path.join(file).is_file() {
+                let mut entry = label.to_string();
+                // Extract Node.js engine version from package.json
+                if *file == "package.json" {
+                    if let Ok(contents) = std::fs::read_to_string(path.join(file)) {
+                        if let Some(engines) = contents.find("\"node\"") {
+                            let snippet = &contents[engines..];
+                            if let Some(end) = snippet.find('}') {
+                                let chunk = &snippet[..end];
+                                if let Some(start) = chunk.find('"') {
+                                    let rest = &chunk[start + 1..];
+                                    if let Some(q) = rest.find('"') {
+                                        let rest2 = &rest[q + 1..];
+                                        if let Some(vs) = rest2.find('"') {
+                                            let ve = rest2[vs + 1..].find('"').unwrap_or(0);
+                                            let version = &rest2[vs + 1..vs + 1 + ve];
+                                            entry = format!("package.json (node: \"{}\")", version);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                found.push(entry);
+            }
+        }
+
+        for (dir, label) in dir_indicators {
+            if path.join(dir).is_dir() {
+                found.push(label.to_string());
+            }
+        }
+
+        // Check for .nvmrc / .node-version
+        for nv in &[".nvmrc", ".node-version"] {
+            let nv_path = path.join(nv);
+            if nv_path.is_file() {
+                if let Ok(v) = std::fs::read_to_string(&nv_path) {
+                    found.push(format!("{}={}", nv, v.trim()));
+                }
+            }
+        }
+
+        // Check for terraform .tf files
+        if let Ok(entries) = std::fs::read_dir(path) {
+            if entries.flatten().any(|e| {
+                e.file_name().to_string_lossy().ends_with(".tf")
+            }) {
+                found.push("terraform".to_string());
+            }
+        }
+
+        // Check for playwright config
+        if let Ok(entries) = std::fs::read_dir(path) {
+            if entries.flatten().any(|e| {
+                e.file_name().to_string_lossy().starts_with("playwright.config")
+            }) {
+                found.push("playwright".to_string());
+            }
+        }
+
+        if !found.is_empty() {
+            out.push_str(&format!("{}: {}\n", name, found.join(" ")));
+        }
+    }
+
+    if repos.is_empty() {
+        anyhow::bail!("No git repositories found in {}", target.display());
+    }
+
+    Ok(out)
 }
 
 /// Run `claude -p` with stream-json output, printing one-line tool summaries as
