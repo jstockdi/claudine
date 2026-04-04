@@ -79,7 +79,12 @@ pub enum Command {
     /// Build the claudine Docker image (or a project's layer image)
     Build {
         /// Project name (rebuilds project layer image; omit for base image)
+        #[arg(conflicts_with = "all")]
         project: Option<String>,
+
+        /// Rebuild all project images that have layers
+        #[arg(long)]
+        all: bool,
     },
 
     /// List all claudine projects

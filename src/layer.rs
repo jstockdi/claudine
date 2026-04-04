@@ -108,8 +108,8 @@ pub fn catalog() -> Vec<Layer> {
             description: "Flyway database migration CLI",
             requires: &["java"],
             build_tool: None,
-            dockerfile: "RUN FLYWAY_VERSION=$(curl -fsSL https://api.github.com/repos/flyway/flyway/releases/latest | grep '\"tag_name\"' | sed 's/.*\"flyway-\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}-linux-x64.tar.gz\" | tar -C /opt -xz \\\n    && ln -s /opt/flyway-${FLYWAY_VERSION}/flyway /usr/local/bin/flyway".to_string(),
-            validate: &["flyway --version"],
+            dockerfile: "RUN FLYWAY_VERSION=$(curl -fsSL https://api.github.com/repos/flyway/flyway/releases/latest | grep '\"tag_name\"' | sed 's/.*\"flyway-\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}.tar.gz\" | tar -C /opt -xz \\\n    && chmod +x /opt/flyway-${FLYWAY_VERSION}/flyway \\\n    && ln -s /opt/flyway-${FLYWAY_VERSION}/flyway /usr/local/bin/flyway".to_string(),
+            validate: &["flyway --help"],
         },
         Layer {
             name: "lin",
@@ -288,6 +288,46 @@ pub fn generate_dockerfile(layers: &[String]) -> anyhow::Result<String> {
     lines.push(String::new());
 
     Ok(lines.join("\n"))
+}
+
+/// Rebuild all project images that have layers installed.
+pub fn cmd_build_all() -> anyhow::Result<()> {
+    let projects = config::list_projects()?;
+    let mut failures: Vec<String> = Vec::new();
+
+    for name in &projects {
+        let project_config = match config::load_project(name) {
+            Ok(c) => c,
+            Err(_) => continue,
+        };
+
+        let has_layers = project_config
+            .layers
+            .as_ref()
+            .map(|l| !l.is_empty())
+            .unwrap_or(false);
+
+        if !has_layers {
+            continue;
+        }
+
+        println!("=== {} ===", name);
+        match cmd_build_project(name) {
+            Ok(()) => {}
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                failures.push(name.clone());
+            }
+        }
+        println!();
+    }
+
+    if failures.is_empty() {
+        println!("All project images rebuilt.");
+        Ok(())
+    } else {
+        anyhow::bail!("{} project(s) failed: {}", failures.len(), failures.join(", "))
+    }
 }
 
 /// Rebuild a project's layer image from its current config.
@@ -526,7 +566,12 @@ fn validate_image(image: &str, layer_names: &[String]) -> anyhow::Result<()> {
         let mut layer_ok = true;
         for cmd in layer.validate {
             let status = Command::new("docker")
-                .args(["run", "--rm", image, "bash", "-c", cmd])
+                .args([
+                    "run", "--rm",
+                    "--entrypoint", "bash",
+                    "-e", "HOME=/tmp",
+                    image, "-c", cmd,
+                ])
                 .stdout(Stdio::null())
                 .stderr(Stdio::null())
                 .status()
