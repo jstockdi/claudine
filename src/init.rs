@@ -177,7 +177,7 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
             eprintln!("Warning: agent suggested unknown plugin '{}', skipping.", p);
         }
     }
-    let plugins: Vec<String> = result.plugins.iter()
+    let mut plugins: Vec<String> = result.plugins.iter()
         .filter(|p| plugin::find(p).is_some())
         .cloned()
         .collect();
@@ -218,6 +218,41 @@ pub fn cmd_init_agent(name: &str, agent_path: &str, flag_ssh_key: Option<&str>) 
         println!("The following technologies were detected but have no claudine plugin yet:");
         for suggestion in &result.suggested_plugins {
             println!("  {} — {}", suggestion.name, suggestion.reason);
+        }
+    }
+
+    // Offer to add extra plugins
+    let catalog = plugin::catalog();
+    let available: Vec<&str> = catalog.iter()
+        .map(|p| p.name)
+        .filter(|n| !plugins.contains(&n.to_string()))
+        .collect();
+    if !available.is_empty() {
+        println!("\nAvailable plugins: {}", available.join(", "));
+        loop {
+            let extra: String = Input::new()
+                .with_prompt("Add plugin (enter to continue)")
+                .default(String::new())
+                .show_default(false)
+                .interact_text()?;
+
+            let trimmed = extra.trim();
+            if trimmed.is_empty() {
+                break;
+            }
+
+            if plugins.contains(&trimmed.to_string()) {
+                println!("'{}' is already included.", trimmed);
+            } else if plugin::find(trimmed).is_some() {
+                if let Err(e) = plugin::check_requires(trimmed, &plugins) {
+                    println!("{}", e);
+                } else {
+                    plugins.push(trimmed.to_string());
+                    println!("Added '{}'.", trimmed);
+                }
+            } else {
+                println!("Unknown plugin '{}'. Available: {}", trimmed, available.join(", "));
+            }
         }
     }
 

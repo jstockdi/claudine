@@ -11,8 +11,28 @@ use clap::{CommandFactory, Parser};
 use clap_complete::generate;
 use cli::{Cli, Command, PluginCommand, RepoCommand};
 
+const BRUCE_LEE_QUOTES: &[&str] = &[
+    "Be water, my friend.",
+    "I fear not the man who has practiced 10,000 kicks once, but I fear the man who has practiced one kick 10,000 times.",
+    "Absorb what is useful, discard what is useless and add what is specifically your own.",
+    "The key to immortality is first living a life worth remembering.",
+    "Knowing is not enough, we must apply. Willing is not enough, we must do.",
+    "Mistakes are always forgivable, if one has the courage to admit them.",
+    "If you spend too much time thinking about a thing, you'll never get it done.",
+    "A wise man can learn more from a foolish question than a fool can learn from a wise answer.",
+    "Do not pray for an easy life, pray for the strength to endure a difficult one.",
+    "To hell with circumstances; I create opportunities.",
+];
+
 fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+
+    // Random Bruce Lee quote on startup
+    let quote = BRUCE_LEE_QUOTES[std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .subsec_nanos() as usize % BRUCE_LEE_QUOTES.len()];
+    eprintln!("\n  \"{}\" — Bruce Lee\n", quote);
 
     match cli.command {
         Command::Build { project: None } => docker::cmd_build(),

@@ -123,7 +123,7 @@ pub fn catalog() -> Vec<Plugin> {
             description: "Terraform CLI for infrastructure provisioning",
             requires: &[],
             build_tool: None,
-            dockerfile: "RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com $(lsb_release -cs) main\" \\\n       > /etc/apt/sources.list.d/hashicorp.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends terraform \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            dockerfile: "RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com bookworm main\" \\\n       > /etc/apt/sources.list.d/hashicorp.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends terraform \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
         },
         Plugin {
             name: "doctl",
