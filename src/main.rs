@@ -1,5 +1,6 @@
 mod cli;
 mod config;
+mod devcontainer;
 mod docker;
 mod init;
 mod layer;
@@ -54,6 +55,10 @@ fn main() -> anyhow::Result<()> {
             let project = resolve::project(&project)?;
             let repo = repo.map(|r| resolve::repo(&project, &r)).transpose()?;
             docker::cmd_shell(&project, repo.as_deref())
+        }
+        Command::Zed { project } => {
+            let project = resolve::project(&project)?;
+            devcontainer::cmd_zed(&project)
         }
         Command::Destroy { project } => {
             let project = resolve::project(&project)?;

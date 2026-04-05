@@ -843,6 +843,11 @@ fn execute_init(
         clone_repo(name, &image, repo)?;
     }
 
+    // Generate devcontainer.json for Zed integration
+    if let Err(e) = crate::devcontainer::write(name) {
+        eprintln!("Warning: failed to generate devcontainer.json: {e}");
+    }
+
     println!("Project '{}' initialized successfully.", name);
     Ok(())
 }

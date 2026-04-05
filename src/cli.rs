@@ -62,6 +62,12 @@ pub enum Command {
         repo: Option<String>,
     },
 
+    /// Open the project in Zed via dev containers
+    Zed {
+        /// Name of the project
+        project: String,
+    },
+
     /// Destroy a project's container and associated resources
     Destroy {
         /// Name of the project to destroy
