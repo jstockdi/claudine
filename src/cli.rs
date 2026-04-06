@@ -66,6 +66,9 @@ pub enum Command {
     Zed {
         /// Name of the project
         project: String,
+
+        /// Repository directory to use as working directory
+        repo: Option<String>,
     },
 
     /// Destroy a project's container and associated resources
