@@ -73,8 +73,8 @@ pub fn catalog() -> Vec<Layer> {
             description: "Python 3 virtual environment support",
             requires: &[],
             build_tool: None,
-            dockerfile: "RUN apt-get update && apt-get install -y python3-venv \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
-            validate: &["python3 -m venv --help"],
+            dockerfile: "RUN PY_MINOR=$(python3 -c 'import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")') \\\n    && apt-get update && apt-get install -y python3-venv \"python${PY_MINOR}-venv\" \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
+            validate: &["python3 -m venv /tmp/_venv_check && rm -rf /tmp/_venv_check"],
         },
         Layer {
             name: "rust",
