@@ -253,15 +253,15 @@ pub fn check_requires(name: &str, installed: &[String]) -> anyhow::Result<()> {
 
 /// Generate a Dockerfile from a list of layer names.
 ///
-/// Layers are ordered by their position in the input list (install order) to
-/// maximize Docker layer cache hits when new layers are appended.
+/// Layers are ordered according to their position in the catalog, regardless
+/// of the order they were installed. This ensures deterministic builds.
 pub fn generate_dockerfile(layers: &[String]) -> anyhow::Result<String> {
     let cat = catalog();
 
-    // Collect layers in install order (preserves config ordering)
-    let ordered: Vec<&Layer> = layers
+    // Collect layers in catalog order
+    let ordered: Vec<&Layer> = cat
         .iter()
-        .filter_map(|name| cat.iter().find(|p| p.name == name))
+        .filter(|p| layers.iter().any(|name| name == p.name))
         .collect();
 
     // Verify all requested layers exist
@@ -754,15 +754,15 @@ mod tests {
     }
 
     #[test]
-    fn generate_dockerfile_preserves_install_order() {
-        // Install heroku first, node-20 second — output should match install order
+    fn generate_dockerfile_multiple_ordered() {
+        // Install heroku first, node-20 second — output should be node-20 first (catalog order)
         let layers = vec!["heroku".to_string(), "node-20".to_string()];
         let result = generate_dockerfile(&layers).unwrap();
-        let heroku_pos = result.find("# Layer: heroku").unwrap();
         let node_pos = result.find("# Layer: node-20").unwrap();
+        let heroku_pos = result.find("# Layer: heroku").unwrap();
         assert!(
-            heroku_pos < node_pos,
-            "heroku should appear before node-20 (install order)"
+            node_pos < heroku_pos,
+            "node-20 should appear before heroku in the Dockerfile"
         );
     }
 
