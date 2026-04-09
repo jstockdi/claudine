@@ -145,6 +145,7 @@ pub fn cmd_shell(project: &str, repo: Option<&str>) -> anyhow::Result<()> {
 /// Validate project exists and repo is valid.
 fn validate_project(project: &str, repo: Option<&str>) -> anyhow::Result<()> {
     project::validate_name(project)?;
+    check_docker()?;
 
     if !project::volume_exists(project)? {
         anyhow::bail!(

@@ -3,7 +3,7 @@ use std::process::Command;
 use dialoguer::Confirm;
 
 use crate::cli::RepoCommand;
-use crate::{config, init, project};
+use crate::{config, docker, init, project};
 
 /// Handle repo subcommands: add, remove, list.
 pub fn cmd_repo(command: RepoCommand) -> anyhow::Result<()> {
@@ -30,6 +30,7 @@ fn repo_add(
     branch: Option<String>,
 ) -> anyhow::Result<()> {
     project::validate_name(project_name)?;
+    docker::check_docker()?;
 
     if !project::volume_exists(project_name)? {
         anyhow::bail!(
@@ -79,6 +80,7 @@ fn repo_add(
 /// Remove a repository from an existing project.
 fn repo_remove(project_name: &str, dir: &str) -> anyhow::Result<()> {
     project::validate_name(project_name)?;
+    docker::check_docker()?;
 
     let mut project_config = config::load_project(project_name)?;
 
