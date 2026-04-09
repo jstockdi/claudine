@@ -17,6 +17,8 @@ pub struct Layer {
     pub dockerfile: String,
     /// Shell commands that should exit 0 when the layer is installed correctly.
     pub validate: &'static [&'static str],
+    /// Directories to prepend to PATH at runtime for this layer.
+    pub path: &'static [&'static str],
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -35,6 +37,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && corepack enable".to_string(),
             validate: &["node --version", "npm --version", "corepack --version"],
+            path: &[],
         },
         Layer {
             name: "node-22",
@@ -43,6 +46,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && corepack enable".to_string(),
             validate: &["node --version", "npm --version", "corepack --version"],
+            path: &[],
         },
         Layer {
             name: "node-24",
@@ -51,6 +55,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://deb.nodesource.com/setup_24.x | bash - \\\n    && apt-get install -y nodejs \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && corepack enable".to_string(),
             validate: &["node --version", "npm --version", "npx --version", "corepack --version"],
+            path: &[],
         },
         Layer {
             name: "gh",
@@ -59,6 +64,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \\\n       | dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main\" \\\n       > /etc/apt/sources.list.d/github-cli.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends gh \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
             validate: &["gh --version"],
+            path: &[],
         },
         Layer {
             name: "heroku",
@@ -67,6 +73,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl https://cli-assets.heroku.com/install.sh | sh".to_string(),
             validate: &["heroku --version"],
+            path: &[],
         },
         Layer {
             name: "python-venv",
@@ -75,6 +82,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN PY_MINOR=$(python3 -c 'import sys; print(f\"{sys.version_info.major}.{sys.version_info.minor}\")') \\\n    && apt-get update && apt-get install -y python3-venv \"python${PY_MINOR}-venv\" \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
             validate: &["python3 -m venv /tmp/_venv_check && rm -rf /tmp/_venv_check"],
+            path: &[],
         },
         Layer {
             name: "msodbc",
@@ -83,6 +91,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN apt-get update && apt-get install -y unixodbc curl gnupg2 \\\n    && curl -fsSL https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor -o /usr/share/keyrings/microsoft-prod.gpg \\\n    && echo \"deb [signed-by=/usr/share/keyrings/microsoft-prod.gpg] https://packages.microsoft.com/debian/12/prod bookworm main\" > /etc/apt/sources.list.d/mssql-release.list \\\n    && apt-get update && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
             validate: &["odbcinst -j"],
+            path: &[],
         },
         Layer {
             name: "rust",
@@ -91,6 +100,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo\nRUN apt-get update && apt-get install -y build-essential \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path \\\n    && chmod -R a+rX /usr/local/rustup /usr/local/cargo \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin\nENV PATH=\"/usr/local/cargo/bin:${PATH}\"".to_string(),
             validate: &["cargo --version", "rustc --version", "just --version"],
+            path: &["/usr/local/cargo/bin"],
         },
         Layer {
             name: "go",
@@ -102,6 +112,7 @@ pub fn catalog() -> Vec<Layer> {
                 ver = GO_VERSION
             ),
             validate: &["go version"],
+            path: &["/usr/local/go/bin"],
         },
         Layer {
             name: "java",
@@ -110,6 +121,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://packages.adoptium.net/artifactory/api/gpg/key/public | gpg --dearmor -o /usr/share/keyrings/adoptium.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/adoptium.gpg] https://packages.adoptium.net/artifactory/deb bookworm main\" \\\n       > /etc/apt/sources.list.d/adoptium.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends temurin-21-jre \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
             validate: &["java -version"],
+            path: &[],
         },
         Layer {
             name: "flyway",
@@ -118,6 +130,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN FLYWAY_VERSION=$(curl -fsSL https://api.github.com/repos/flyway/flyway/releases/latest | grep '\"tag_name\"' | sed 's/.*\"flyway-\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://download.red-gate.com/maven/release/com/redgate/flyway/flyway-commandline/${FLYWAY_VERSION}/flyway-commandline-${FLYWAY_VERSION}.tar.gz\" | tar -C /opt -xz \\\n    && chmod +x /opt/flyway-${FLYWAY_VERSION}/flyway \\\n    && ln -s /opt/flyway-${FLYWAY_VERSION}/flyway /usr/local/bin/flyway".to_string(),
             validate: &["flyway --help"],
+            path: &[],
         },
         Layer {
             name: "lin",
@@ -126,6 +139,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: Some(BuildTool::Rust),
             dockerfile: "RUN git clone https://github.com/sprouted-dev/lin.git /tmp/lin \\\n    && cd /tmp/lin \\\n    && cargo build --release \\\n    && cp target/release/lin /usr/local/bin/lin \\\n    && chmod 755 /usr/local/bin/lin \\\n    && rm -rf /tmp/lin".to_string(),
             validate: &["lin --help"],
+            path: &[],
         },
         Layer {
             name: "glab",
@@ -134,6 +148,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: Some(BuildTool::Go),
             dockerfile: "RUN git clone https://github.com/jstockdi/glab.git /tmp/glab \\\n    && cd /tmp/glab \\\n    && make build \\\n    && cp bin/glab /usr/local/bin/glab \\\n    && chmod 755 /usr/local/bin/glab \\\n    && rm -rf /tmp/glab".to_string(),
             validate: &["glab version"],
+            path: &[],
         },
         Layer {
             name: "aws",
@@ -142,6 +157,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL \"https://awscli.amazonaws.com/awscli-exe-linux-$(uname -m).zip\" -o /tmp/awscliv2.zip \\\n    && unzip -q /tmp/awscliv2.zip -d /tmp \\\n    && /tmp/aws/install \\\n    && rm -rf /tmp/awscliv2.zip /tmp/aws".to_string(),
             validate: &["aws --version"],
+            path: &[],
         },
         Layer {
             name: "terraform",
@@ -150,6 +166,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN curl -fsSL https://apt.releases.hashicorp.com/gpg | gpg --dearmor -o /usr/share/keyrings/hashicorp-archive-keyring.gpg \\\n    && echo \"deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com bookworm main\" \\\n       > /etc/apt/sources.list.d/hashicorp.list \\\n    && apt-get update \\\n    && apt-get install -y --no-install-recommends terraform \\\n    && rm -rf /var/lib/apt/lists/*".to_string(),
             validate: &["terraform version"],
+            path: &[],
         },
         Layer {
             name: "doctl",
@@ -158,6 +175,7 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN DOCTL_VERSION=$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest | grep '\"tag_name\"' | sed 's/.*\"v\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-$(dpkg --print-architecture).tar.gz\" | tar -C /usr/local/bin -xz \\\n    && chmod 755 /usr/local/bin/doctl".to_string(),
             validate: &["doctl version"],
+            path: &[],
         },
         Layer {
             name: "rodney",
@@ -166,8 +184,36 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: Some(BuildTool::Go),
             dockerfile: "RUN apt-get update && apt-get install -y --no-install-recommends chromium \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && git clone https://github.com/jstockdi/rodney.git /tmp/rodney \\\n    && cd /tmp/rodney \\\n    && go build -o /usr/local/bin/rodney . \\\n    && chmod 755 /usr/local/bin/rodney \\\n    && rm -rf /tmp/rodney".to_string(),
             validate: &["chromium --version", "rodney --help"],
+            path: &[],
         },
     ]
+}
+
+const BASE_PATH: &[&str] = &[
+    "/usr/local/sbin",
+    "/usr/local/bin",
+    "/usr/sbin",
+    "/usr/bin",
+    "/sbin",
+    "/bin",
+];
+
+/// Compute the full PATH for a project based on its installed layers.
+///
+/// Prepends `/project/home/.local/bin` and any layer-specific paths (in catalog
+/// order) before the standard system PATH.
+pub fn compute_path(layers: &[String]) -> String {
+    let cat = catalog();
+    let mut entries: Vec<&str> = vec!["/project/home/.local/bin"];
+
+    for layer in &cat {
+        if layers.iter().any(|n| n == layer.name) {
+            entries.extend_from_slice(layer.path);
+        }
+    }
+
+    entries.extend_from_slice(BASE_PATH);
+    entries.join(":")
 }
 
 /// Look up a layer by name in the catalog.
@@ -207,15 +253,15 @@ pub fn check_requires(name: &str, installed: &[String]) -> anyhow::Result<()> {
 
 /// Generate a Dockerfile from a list of layer names.
 ///
-/// Layers are ordered according to their position in the catalog, regardless
-/// of the order they were installed. This ensures deterministic builds.
+/// Layers are ordered by their position in the input list (install order) to
+/// maximize Docker layer cache hits when new layers are appended.
 pub fn generate_dockerfile(layers: &[String]) -> anyhow::Result<String> {
     let cat = catalog();
 
-    // Collect layers in catalog order
-    let ordered: Vec<&Layer> = cat
+    // Collect layers in install order (preserves config ordering)
+    let ordered: Vec<&Layer> = layers
         .iter()
-        .filter(|p| layers.iter().any(|name| name == p.name))
+        .filter_map(|name| cat.iter().find(|p| p.name == name))
         .collect();
 
     // Verify all requested layers exist
@@ -708,15 +754,15 @@ mod tests {
     }
 
     #[test]
-    fn generate_dockerfile_multiple_ordered() {
-        // Install heroku first, node-20 second — output should be node-20 first
+    fn generate_dockerfile_preserves_install_order() {
+        // Install heroku first, node-20 second — output should match install order
         let layers = vec!["heroku".to_string(), "node-20".to_string()];
         let result = generate_dockerfile(&layers).unwrap();
-        let node_pos = result.find("# Layer: node-20").unwrap();
         let heroku_pos = result.find("# Layer: heroku").unwrap();
+        let node_pos = result.find("# Layer: node-20").unwrap();
         assert!(
-            node_pos < heroku_pos,
-            "node-20 should appear before heroku in the Dockerfile"
+            heroku_pos < node_pos,
+            "heroku should appear before node-20 (install order)"
         );
     }
 
@@ -816,5 +862,42 @@ mod tests {
     #[test]
     fn collect_validation_layers_unknown() {
         assert!(collect_validation_layers("nope").is_err());
+    }
+
+    #[test]
+    fn compute_path_no_layers() {
+        let layers: Vec<String> = vec![];
+        let path = compute_path(&layers);
+        assert!(path.starts_with("/project/home/.local/bin:"));
+        assert!(!path.contains("/usr/local/cargo/bin"));
+        assert!(!path.contains("/usr/local/go/bin"));
+    }
+
+    #[test]
+    fn compute_path_with_rust() {
+        let layers = vec!["rust".to_string()];
+        let path = compute_path(&layers);
+        assert!(path.contains("/usr/local/cargo/bin"));
+        assert!(!path.contains("/usr/local/go/bin"));
+    }
+
+    #[test]
+    fn compute_path_with_go() {
+        let layers = vec!["go".to_string()];
+        let path = compute_path(&layers);
+        assert!(path.contains("/usr/local/go/bin"));
+        assert!(!path.contains("/usr/local/cargo/bin"));
+    }
+
+    #[test]
+    fn compute_path_with_both() {
+        let layers = vec!["rust".to_string(), "go".to_string()];
+        let path = compute_path(&layers);
+        assert!(path.contains("/usr/local/cargo/bin"));
+        assert!(path.contains("/usr/local/go/bin"));
+        // rust should come before go (catalog order)
+        let rust_pos = path.find("/usr/local/cargo/bin").unwrap();
+        let go_pos = path.find("/usr/local/go/bin").unwrap();
+        assert!(rust_pos < go_pos);
     }
 }

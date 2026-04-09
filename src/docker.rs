@@ -3,7 +3,7 @@ use std::process::Command;
 
 use dialoguer::Confirm;
 
-use crate::{config, project};
+use crate::{config, layer, project};
 
 const DOCKERFILE: &str = include_str!("../Dockerfile");
 const ENTRYPOINT: &str = include_str!("../entrypoint.sh");
@@ -91,6 +91,9 @@ pub fn cmd_build_project(project: &str, dockerfile_content: &str, no_cache: bool
     args.push(&tag);
     if no_cache {
         args.push("--no-cache");
+    } else {
+        args.push("--cache-from");
+        args.push(&tag);
     }
 
     let status = Command::new("docker")
@@ -139,7 +142,7 @@ pub fn cmd_run(project: &str, repo: Option<&str>, resume: Option<&str>, prompt: 
 /// Otherwise, starts a new named container with bash.
 pub fn cmd_shell(project: &str, repo: Option<&str>) -> anyhow::Result<()> {
     validate_project(project, repo)?;
-    exec_in_project(project, repo, &["bash".to_string()])
+    exec_in_project(project, repo, &["zsh".to_string()])
 }
 
 /// Validate project exists and repo is valid.
@@ -181,6 +184,10 @@ fn exec_in_project(project: &str, repo: Option<&str>, container_cmd: &[String]) 
     };
 
     if project::container_running(project)? {
+        let project_config = config::load_project(project)?;
+        let layers = project_config.layers.as_deref().unwrap_or(&[]);
+        let path = layer::compute_path(layers);
+
         let mut cmd = Command::new("docker");
         cmd.arg("exec");
 
@@ -191,7 +198,7 @@ fn exec_in_project(project: &str, repo: Option<&str>, container_cmd: &[String]) 
         cmd.args(["-u", "claude"]);
         cmd.args(["-w", &workdir]);
         cmd.args(["-e", "HOME=/project/home"]);
-        cmd.args(["-e", "PATH=/project/home/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"]);
+        cmd.args(["-e", &format!("PATH={}", path)]);
         cmd.arg(project::container_name(project));
         cmd.args(container_cmd);
 

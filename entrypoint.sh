@@ -16,7 +16,7 @@ export PATH="/project/home/.local/bin:$PATH"
 
 # Drop privileges and execute the requested command (or bash if none given)
 if [ $# -eq 0 ]; then
-    exec gosu claude bash
+    exec gosu claude zsh
 else
     exec gosu claude "$@"
 fi
