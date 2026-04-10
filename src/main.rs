@@ -61,9 +61,9 @@ fn main() -> anyhow::Result<()> {
             let repo = repo.map(|r| resolve::repo(&project, &r)).transpose()?;
             devcontainer::cmd_zed(&project, repo.as_deref())
         }
-        Command::Destroy { project } => {
+        Command::Destroy { project, purge } => {
             let project = resolve::project(&project)?;
-            docker::cmd_destroy(&project)
+            docker::cmd_destroy(&project, purge)
         }
         Command::List => docker::cmd_list(),
         Command::Layer { command } => match command {

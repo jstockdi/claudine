@@ -27,6 +27,30 @@ pub fn check_docker() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Stop and remove all containers using a given image tag.
+fn remove_containers_for_image(image: &str) {
+    let output = Command::new("docker")
+        .args(["ps", "-a", "--filter", &format!("ancestor={}", image), "--format", "{{.Names}}"])
+        .output();
+
+    if let Ok(output) = output {
+        let names = String::from_utf8_lossy(&output.stdout);
+        for name in names.lines().filter(|n| !n.is_empty()) {
+            println!("Removing container '{}' (old image)...", name);
+            let _ = Command::new("docker")
+                .args(["stop", name])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+            let _ = Command::new("docker")
+                .args(["rm", name])
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+        }
+    }
+}
+
 /// Build the claudine Docker image.
 pub fn cmd_build(no_cache: bool) -> anyhow::Result<()> {
     check_docker()?;
@@ -65,6 +89,7 @@ pub fn cmd_build(no_cache: bool) -> anyhow::Result<()> {
         anyhow::bail!("Docker build failed with exit code: {}", status);
     }
 
+    remove_containers_for_image("claudine:latest");
     println!("Successfully built claudine:latest");
     Ok(())
 }
@@ -108,6 +133,7 @@ pub fn cmd_build_project(project: &str, dockerfile_content: &str, no_cache: bool
         anyhow::bail!("Docker build failed with exit code: {}", status);
     }
 
+    remove_containers_for_image(&tag);
     println!("Successfully built {}", tag);
     Ok(())
 }
@@ -272,30 +298,34 @@ fn exec_in_project(project: &str, repo: Option<&str>, container_cmd: &[String]) 
     Err(anyhow::anyhow!("Failed to exec docker: {}", err))
 }
 
-/// Destroy a project by removing its container, volume, and configuration.
+/// Destroy a project by removing its container and optionally its volume and configuration.
 ///
-/// Prompts for confirmation before proceeding. Stops any running container,
-/// removes the Docker volume, and deletes the project config directory.
-pub fn cmd_destroy(project: &str) -> anyhow::Result<()> {
+/// By default, only removes the container. With `purge: true`, also removes the
+/// Docker volume and project config directory.
+pub fn cmd_destroy(project: &str, purge: bool) -> anyhow::Result<()> {
     project::validate_name(project)?;
 
     // Check that the project has some presence (config or volume)
     let has_volume = project::volume_exists(project)?;
+    let has_container = project::container_exists(project)?;
     let config_dir = config::config_dir()?.join("projects").join(project);
     let has_config = config_dir.exists();
 
-    if !has_volume && !has_config {
+    if !has_volume && !has_config && !has_container {
         anyhow::bail!(
             "No project '{}' found. Nothing to destroy.",
             project
         );
     }
 
+    let prompt_msg = if purge {
+        format!("This will delete ALL data for '{}' (container, volume, config). Continue?", project)
+    } else {
+        format!("This will remove the container for '{}'. Volume and config are preserved. Continue?", project)
+    };
+
     let confirmed = Confirm::new()
-        .with_prompt(format!(
-            "This will delete all data for '{}'. Continue?",
-            project
-        ))
+        .with_prompt(prompt_msg)
         .default(false)
         .interact()?;
 
@@ -304,7 +334,7 @@ pub fn cmd_destroy(project: &str) -> anyhow::Result<()> {
     }
 
     // Stop and remove the container if it exists
-    if project::container_exists(project)? {
+    if has_container {
         let cname = project::container_name(project);
         println!("Removing container '{}'...", cname);
         let _ = Command::new("docker")
@@ -327,24 +357,29 @@ pub fn cmd_destroy(project: &str) -> anyhow::Result<()> {
         }
     }
 
-    // Remove the Docker volume
-    if has_volume {
-        println!("Removing volume '{}'...", project::volume_name(project));
-        project::remove_volume(project)?;
+    if purge {
+        // Remove the Docker volume
+        if has_volume {
+            println!("Removing volume '{}'...", project::volume_name(project));
+            project::remove_volume(project)?;
+        }
+
+        // Remove the project config directory
+        if has_config {
+            println!("Removing config directory...");
+            std::fs::remove_dir_all(&config_dir).map_err(|e| {
+                anyhow::anyhow!(
+                    "Failed to remove config directory '{}': {e}",
+                    config_dir.display()
+                )
+            })?;
+        }
+
+        println!("Project '{}' purged.", project);
+    } else {
+        println!("Container for '{}' removed. Volume and config preserved.", project);
     }
 
-    // Remove the project config directory
-    if has_config {
-        println!("Removing config directory...");
-        std::fs::remove_dir_all(&config_dir).map_err(|e| {
-            anyhow::anyhow!(
-                "Failed to remove config directory '{}': {e}",
-                config_dir.display()
-            )
-        })?;
-    }
-
-    println!("Project '{}' destroyed.", project);
     Ok(())
 }
 

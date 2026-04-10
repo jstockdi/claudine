@@ -71,10 +71,14 @@ pub enum Command {
         repo: Option<String>,
     },
 
-    /// Destroy a project's container and associated resources
+    /// Destroy a project's container (use --purge to also remove volume and config)
     Destroy {
         /// Name of the project to destroy
         project: String,
+
+        /// Also remove the Docker volume and project config
+        #[arg(long)]
+        purge: bool,
     },
 
     /// Manage repositories in a project
