@@ -90,6 +90,36 @@ pub fn container_running(project: &str) -> anyhow::Result<bool> {
     Ok(!stdout.trim().is_empty())
 }
 
+/// Check whether the Docker container for a project exists (running or stopped).
+pub fn container_exists(project: &str) -> anyhow::Result<bool> {
+    let name = container_name(project);
+    let filter = format!("name=^{name}$");
+    let output = Command::new("docker")
+        .args(["ps", "-a", "--filter", &filter, "--format", "{{.Names}}"])
+        .output()
+        .map_err(|e| anyhow::anyhow!("Failed to run 'docker ps': {e}"))?;
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    Ok(!stdout.trim().is_empty())
+}
+
+/// Start a stopped container.
+pub fn container_start(project: &str) -> anyhow::Result<()> {
+    let name = container_name(project);
+    let status = Command::new("docker")
+        .args(["start", &name])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run 'docker start': {e}"))?;
+
+    if !status.success() {
+        anyhow::bail!("Failed to start container '{name}'.");
+    }
+
+    Ok(())
+}
+
 /// Create a Docker volume for a project.
 pub fn create_volume(project: &str) -> anyhow::Result<()> {
     let name = volume_name(project);

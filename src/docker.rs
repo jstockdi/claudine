@@ -183,6 +183,7 @@ fn exec_in_project(project: &str, repo: Option<&str>, container_cmd: &[String]) 
         None => "/project".to_string(),
     };
 
+    // State 1: Container is running — exec into it
     if project::container_running(project)? {
         let project_config = config::load_project(project)?;
         let layers = project_config.layers.as_deref().unwrap_or(&[]);
@@ -206,15 +207,65 @@ fn exec_in_project(project: &str, repo: Option<&str>, container_cmd: &[String]) 
         return Err(anyhow::anyhow!("Failed to exec docker: {}", err));
     }
 
-    // No running container — start a new one
+    // State 2: Container exists but stopped — restart it, then exec
+    if project::container_exists(project)? {
+        project::container_start(project)?;
+
+        let project_config = config::load_project(project)?;
+        let layers = project_config.layers.as_deref().unwrap_or(&[]);
+        let path = layer::compute_path(layers);
+
+        let mut cmd = Command::new("docker");
+        cmd.arg("exec");
+
+        if std::io::stdin().is_terminal() {
+            cmd.arg("-it");
+        }
+
+        cmd.args(["-u", "claude"]);
+        cmd.args(["-w", &workdir]);
+        cmd.args(["-e", "HOME=/project/home"]);
+        cmd.args(["-e", &format!("PATH={}", path)]);
+        cmd.arg(project::container_name(project));
+        cmd.args(container_cmd);
+
+        let err = cmd.exec();
+        return Err(anyhow::anyhow!("Failed to exec docker: {}", err));
+    }
+
+    // State 3: No container — create one with a keep-alive, then exec
     let project_config = config::load_project(project)?;
     let global_config = config::load_global()?;
     let image = config::resolve_image(&project_config, &global_config);
 
     let docker_args = build_run_args(project, &image, repo);
 
+    let status = Command::new("docker")
+        .args(&docker_args)
+        .args(["sleep", "infinity"])
+        .stdout(std::process::Stdio::null())
+        .status()
+        .map_err(|e| anyhow::anyhow!("Failed to run 'docker run': {e}"))?;
+
+    if !status.success() {
+        anyhow::bail!("Failed to start container for project '{}'.", project);
+    }
+
+    let layers = project_config.layers.as_deref().unwrap_or(&[]);
+    let path = layer::compute_path(layers);
+
     let mut cmd = Command::new("docker");
-    cmd.args(&docker_args);
+    cmd.arg("exec");
+
+    if std::io::stdin().is_terminal() {
+        cmd.arg("-it");
+    }
+
+    cmd.args(["-u", "claude"]);
+    cmd.args(["-w", &workdir]);
+    cmd.args(["-e", "HOME=/project/home"]);
+    cmd.args(["-e", &format!("PATH={}", path)]);
+    cmd.arg(project::container_name(project));
     cmd.args(container_cmd);
 
     let err = cmd.exec();
@@ -252,20 +303,26 @@ pub fn cmd_destroy(project: &str) -> anyhow::Result<()> {
         anyhow::bail!("Destroy cancelled.");
     }
 
-    // Stop the container if it is running
-    if project::container_running(project)? {
-        println!("Stopping container '{}'...", project::container_name(project));
+    // Stop and remove the container if it exists
+    if project::container_exists(project)? {
+        let cname = project::container_name(project);
+        println!("Removing container '{}'...", cname);
+        let _ = Command::new("docker")
+            .args(["stop", &cname])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
         let status = Command::new("docker")
-            .args(["stop", &project::container_name(project)])
+            .args(["rm", &cname])
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::null())
             .status()
-            .map_err(|e| anyhow::anyhow!("Failed to run 'docker stop': {e}"))?;
+            .map_err(|e| anyhow::anyhow!("Failed to run 'docker rm': {e}"))?;
 
         if !status.success() {
             eprintln!(
-                "Warning: failed to stop container '{}' (it may have already exited).",
-                project::container_name(project)
+                "Warning: failed to remove container '{}'.",
+                cname
             );
         }
     }
@@ -375,7 +432,7 @@ pub fn cmd_list() -> anyhow::Result<()> {
 pub(crate) fn build_run_args(project: &str, image: &str, repo: Option<&str>) -> Vec<String> {
     let mut args = vec![
         "run".to_string(),
-        "--rm".to_string(),
+        "-d".to_string(),
         "--name".to_string(),
         project::container_name(project),
         "-v".to_string(),

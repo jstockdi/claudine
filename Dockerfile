@@ -13,8 +13,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gosu \
     git \
     jq \
+    libssl-dev \
     unzip \
     openssh-client \
+    pkg-config \
     python3 \
     less \
     netcat-openbsd \
@@ -43,18 +45,24 @@ RUN curl -fsSL https://claude.ai/install.sh | bash \
     && cp /root/.local/bin/claude /usr/local/bin/claude \
     && chmod 755 /usr/local/bin/claude
 
+# Install Rust toolchain to /usr/local so it survives volume mounts
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV CARGO_HOME=/usr/local/cargo
+ENV PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+
 # Install ward (PII/secrets scanner for Claude Code hooks)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-    && . /root/.cargo/env \
-    && git clone https://github.com/jstockdi/ward.git /tmp/ward \
+RUN git clone https://github.com/jstockdi/ward.git /tmp/ward \
     && cd /tmp/ward \
     && cargo build --release \
     && cp target/release/ward /usr/local/bin/ward \
     && chmod 755 /usr/local/bin/ward \
-    && rm -rf /tmp/ward /root/.cargo /root/.rustup
+    && rm -rf /tmp/ward
 
-# Create non-root user with home at /project/home (persistent volume)
-RUN useradd -d /project/home -s /bin/zsh claude
+# Create non-root user and grant access to Rust toolchain
+RUN useradd -d /project/home -s /bin/zsh claude \
+    && chmod -R a+rwX /usr/local/rustup /usr/local/cargo
 
 # Add alias and ensure ~/.local/bin is on PATH for all shell types
 RUN echo 'alias claude="claude --dangerously-skip-permissions"' >> /etc/bash.bashrc \
