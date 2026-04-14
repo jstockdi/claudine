@@ -131,7 +131,7 @@ pub fn catalog() -> Vec<Layer> {
             description: "Rust toolchain (persistent, available at runtime)",
             requires: &[],
             build_tool: None,
-            dockerfile: "ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path \\\n    && chmod -R a+rwX /usr/local/rustup /usr/local/cargo \\\n    && curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin\nENV PATH=\"/usr/local/cargo/bin:${PATH}\"".to_string(),
+            dockerfile: "ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path \\\n    && chmod -R a+rwX /usr/local/rustup /usr/local/cargo \\\n    && /usr/local/cargo/bin/cargo install just --root /usr/local \\\n    && chmod -R a+rwX /usr/local/cargo\nENV PATH=\"/usr/local/cargo/bin:${PATH}\"".to_string(),
             validate: &["cargo --version", "rustc --version", "just --version"],
             path: &["/usr/local/cargo/bin"],
             source_repo: None,
