@@ -6,6 +6,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-21
+
+### Fixed
+- Corrected v0.1.1 tag (was force-updated after initial release; this is the
+  clean re-release of the same fix with proper version history)
+
 ## [0.1.1] - 2026-04-21
 
 ### Fixed
@@ -35,6 +41,7 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/jstockdi/claudine/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jstockdi/claudine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jstockdi/claudine/releases/tag/v0.1.0
