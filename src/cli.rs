@@ -86,6 +86,16 @@ pub enum Command {
         purge: bool,
     },
 
+    /// Migrate a project from legacy single-volume to bind+home-volume layout
+    Migrate {
+        /// Name of the project to migrate
+        project: String,
+
+        /// Skip confirmation prompts
+        #[arg(long)]
+        yes: bool,
+    },
+
     /// Manage repositories in a project
     Repo {
         #[command(subcommand)]

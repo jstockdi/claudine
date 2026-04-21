@@ -2,15 +2,22 @@
 set -euo pipefail
 
 # This script runs as root inside a one-shot container during `claudine init`.
-# It sets up /project/home with git config, SSH key, and Claude settings.
-# Claude auth is handled by the user inside the container (not copied from host).
+# It sets up /project/home (the HOME volume or nested subdir) with git config,
+# SSH key, and Claude settings. Claude auth is handled by the user inside the
+# container (not copied from host).
+#
+# Under the new bind-mount layout, /project is a host bind and is never chowned
+# here (host owns those files). Only /project/home (the HOME volume) is mutated.
 
 # Create and own home directory
 mkdir -p /project/home
 chown claude:claude /project/home
 
-# Ensure /project is writable by claude (for cloning repos)
-chown claude:claude /project
+# Legacy layout only: when /project/home is NOT a separate mountpoint, /project
+# is the single project volume and claude needs write access to it for cloning.
+if ! mountpoint -q /project/home; then
+    chown claude:claude /project
+fi
 
 # gitconfig
 if [ -f /tmp/host-gitconfig ]; then

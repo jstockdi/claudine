@@ -18,44 +18,75 @@ pub fn generate(project: &str, repo: Option<&str>) -> anyhow::Result<String> {
         None => "/project".to_string(),
     };
 
-    let json = serde_json::json!({
-        "name": name,
-        "image": image,
-        "overrideCommand": true,
-        "remoteUser": "claude",
-        "workspaceMount": format!(
-            "source={},target=/project,type=volume",
-            project::volume_name(project)
-        ),
-        "workspaceFolder": workspace_folder,
-        "mounts": [
-            "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
-        ],
-        "runArgs": ["--shm-size=256m"],
-        "containerEnv": {
-            "HOME": "/project/home"
-        }
-    });
+    let json = if let Some(host_dir) = &project_config.host_dir {
+        // New layout: bind host_dir → /project, named volume for HOME
+        serde_json::json!({
+            "name": name,
+            "image": image,
+            "overrideCommand": true,
+            "remoteUser": "claude",
+            "workspaceMount": format!("source={},target=/project,type=bind", host_dir),
+            "workspaceFolder": workspace_folder,
+            "mounts": [
+                format!(
+                    "source={},target=/project/home,type=volume",
+                    project::home_volume_name(project)
+                ),
+                "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+            ],
+            "runArgs": ["--shm-size=256m"],
+            "containerEnv": {
+                "HOME": "/project/home"
+            }
+        })
+    } else {
+        // Legacy layout: single volume at /project
+        serde_json::json!({
+            "name": name,
+            "image": image,
+            "overrideCommand": true,
+            "remoteUser": "claude",
+            "workspaceMount": format!(
+                "source={},target=/project,type=volume",
+                project::volume_name(project)
+            ),
+            "workspaceFolder": workspace_folder,
+            "mounts": [
+                "source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
+            ],
+            "runArgs": ["--shm-size=256m"],
+            "containerEnv": {
+                "HOME": "/project/home"
+            }
+        })
+    };
 
     serde_json::to_string_pretty(&json)
         .map_err(|e| anyhow::anyhow!("Failed to serialize devcontainer.json: {e}"))
 }
 
 /// Return the base directory for devcontainer output.
-/// With a repo, returns ~/share/<project>/<repo>/;
-/// without, returns ~/share/<project>/.
+///
+/// Under the new bind layout (`host_dir` set in project config), this is the
+/// host_dir itself (or a repo subfolder). Under legacy layout, it falls back
+/// to `~/share/<project>/`.
 fn devcontainer_base(project: &str, repo: Option<&str>) -> anyhow::Result<std::path::PathBuf> {
-    let share = project::share_dir(project)?;
-    if !share.exists() {
+    let project_config = config::load_project(project)?;
+    let base = match &project_config.host_dir {
+        Some(dir) => std::path::PathBuf::from(dir),
+        None => project::share_dir(project)?,
+    };
+
+    if !base.exists() {
         anyhow::bail!(
-            "Share directory does not exist: {}. Run 'claudine init {}' first.",
-            share.display(),
+            "Project directory does not exist: {}. Run 'claudine init {}' first.",
+            base.display(),
             project
         );
     }
     match repo {
-        Some(r) => Ok(share.join(r)),
-        None => Ok(share),
+        Some(r) => Ok(base.join(r)),
+        None => Ok(base),
     }
 }
 
@@ -85,15 +116,15 @@ pub fn cmd_zed(project: &str, repo: Option<&str>) -> anyhow::Result<()> {
 
     match which::which("zed") {
         Ok(_) => {
-            let status = Command::new("zed")
+            // Spawn Zed and return immediately — Zed is a long-running GUI.
+            Command::new("zed")
                 .arg(&base)
-                .status()
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .stdin(std::process::Stdio::null())
+                .spawn()
                 .map_err(|e| anyhow::anyhow!("Failed to launch Zed: {e}"))?;
-
-            if !status.success() {
-                eprintln!("Zed exited with non-zero status. Open manually:");
-                println!("  zed {}", base.display());
-            }
+            println!("Opened {} in Zed.", base.display());
         }
         Err(_) => {
             println!("Zed not found on PATH. Open this directory in Zed:");

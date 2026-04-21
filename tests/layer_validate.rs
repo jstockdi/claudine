@@ -5,7 +5,7 @@
 //!
 //! These tests require Docker and the `claudine:latest` base image.
 //! Run with: `cargo test --test layer_validate -- --ignored`
-//! Run a single layer: `cargo test --test layer_validate validate_rust -- --ignored`
+//! Run a single layer: `cargo test --test layer_validate validate_go -- --ignored`
 
 use std::process::Command;
 
@@ -61,12 +61,6 @@ fn validate_heroku() {
 #[ignore]
 fn validate_python_venv() {
     validate("python-venv");
-}
-
-#[test]
-#[ignore]
-fn validate_rust() {
-    validate("rust");
 }
 
 #[test]

@@ -4,6 +4,7 @@ mod devcontainer;
 mod docker;
 mod init;
 mod layer;
+mod migrate;
 mod project;
 mod repo;
 mod resolve;
@@ -65,6 +66,10 @@ fn main() -> anyhow::Result<()> {
         Command::Destroy { project, purge } => {
             let project = resolve::project(&project)?;
             docker::cmd_destroy(&project, purge)
+        }
+        Command::Migrate { project, yes } => {
+            let project = resolve::project(&project)?;
+            migrate::cmd_migrate(&project, yes)
         }
         Command::List => docker::cmd_list(),
         Command::Layer { command } => match command {

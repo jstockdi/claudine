@@ -11,6 +11,13 @@ if [ -S /var/run/docker.sock ]; then
     usermod -aG "${DOCKER_GROUP_NAME}" claude
 fi
 
+# Ensure /project/home belongs to the current claude UID. The HOME volume was
+# seeded by setup-home as root; after Zed's UID remap (or any passwd change)
+# claude's UID may differ, so reassert ownership every startup.
+if [ -d /project/home ]; then
+    chown -R claude:claude /project/home 2>/dev/null || true
+fi
+
 # Seed a default .zshrc on first run so zsh-newuser-install doesn't prompt
 if [ ! -f /project/home/.zshrc ] && [ -f /etc/zsh/newuser.zshrc.recommended ]; then
     install -o claude -g claude -m 0644 \
@@ -20,9 +27,15 @@ fi
 # Ensure ~/.local/bin is on PATH for all shell types
 export PATH="/project/home/.local/bin:$PATH"
 
+# Capture the caller-provided HOME before gosu resets it to the passwd home.
+# gosu switches to the claude user but overwrites HOME with /home/claude;
+# we re-assert the intended value (e.g. /project/home) via env so SSH, git,
+# and other tools resolve configs and keys from the project home volume.
+_HOME="${HOME}"
+
 # Drop privileges and execute the requested command (or bash if none given)
 if [ $# -eq 0 ]; then
-    exec gosu claude zsh
+    exec gosu claude env HOME="${_HOME}" zsh
 else
-    exec gosu claude "$@"
+    exec gosu claude env HOME="${_HOME}" "$@"
 fi

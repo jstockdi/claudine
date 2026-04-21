@@ -60,8 +60,14 @@ RUN git clone https://github.com/jstockdi/ward.git /tmp/ward \
     && chmod 755 /usr/local/bin/ward \
     && rm -rf /tmp/ward
 
-# Create non-root user and grant access to Rust toolchain
-RUN useradd -d /project/home -s /bin/zsh claude \
+# Install `just` command runner into the base so every project has it
+RUN cargo install just --root /usr/local \
+    && chmod -R a+rwX /usr/local/cargo
+
+# Create non-root user with a real home dir in the image so build-time chown
+# (e.g. devcontainer UID remap) succeeds. Runtime HOME is overridden to
+# /project/home via containerEnv so shell state persists on the project volume.
+RUN useradd -m -d /home/claude -s /bin/zsh claude \
     && chmod -R a+rwX /usr/local/rustup /usr/local/cargo
 
 # Add alias and ensure ~/.local/bin is on PATH for all shell types

@@ -127,17 +127,6 @@ pub fn catalog() -> Vec<Layer> {
             source_ref: None,
         },
         Layer {
-            name: "rust",
-            description: "Rust toolchain (persistent, available at runtime)",
-            requires: &[],
-            build_tool: None,
-            dockerfile: "ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo\nRUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path \\\n    && chmod -R a+rwX /usr/local/rustup /usr/local/cargo \\\n    && /usr/local/cargo/bin/cargo install just --root /usr/local \\\n    && chmod -R a+rwX /usr/local/cargo\nENV PATH=\"/usr/local/cargo/bin:${PATH}\"".to_string(),
-            validate: &["cargo --version", "rustc --version", "just --version"],
-            path: &["/usr/local/cargo/bin"],
-            source_repo: None,
-            source_ref: None,
-        },
-        Layer {
             name: "go",
             description: "Go toolchain (persistent, available at runtime)",
             requires: &[],
@@ -275,6 +264,7 @@ pub fn catalog() -> Vec<Layer> {
 }
 
 const BASE_PATH: &[&str] = &[
+    "/usr/local/cargo/bin",
     "/usr/local/sbin",
     "/usr/local/bin",
     "/usr/sbin",
@@ -356,8 +346,7 @@ pub fn generate_dockerfile(layers: &[String]) -> anyhow::Result<String> {
         }
     }
 
-    let needs_rust = ordered.iter().any(|p| p.build_tool == Some(BuildTool::Rust))
-        && !layers.iter().any(|n| n == "rust");
+    // Rust toolchain ships in the base image; Go is still installed on demand.
     let needs_go = ordered.iter().any(|p| p.build_tool == Some(BuildTool::Go))
         && !layers.iter().any(|n| n == "go");
 
@@ -370,19 +359,11 @@ pub fn generate_dockerfile(layers: &[String]) -> anyhow::Result<String> {
         lines.push(layer.dockerfile.to_string());
     }
 
-    // Install build toolchains as needed
-    if needs_rust || needs_go {
+    // Install Go toolchain temporarily if needed
+    if needs_go {
         lines.push(String::new());
-        lines.push("# Build phase: install build toolchains".to_string());
-
-        if needs_rust {
-            lines.push("ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo".to_string());
-            lines.push("RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path".to_string());
-        }
-
-        if needs_go {
-            lines.push(format!("RUN curl -fsSL https://go.dev/dl/go{GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xz"));
-        }
+        lines.push("# Build phase: install Go toolchain".to_string());
+        lines.push(format!("RUN curl -fsSL https://go.dev/dl/go{GO_VERSION}.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xz"));
     }
 
     // Compiled layers (Rust first, then Go — catalog order)
@@ -402,21 +383,11 @@ pub fn generate_dockerfile(layers: &[String]) -> anyhow::Result<String> {
         }
     }
 
-    // Clean up temporary build toolchains
-    if needs_rust || needs_go {
+    // Clean up Go toolchain (rust stays — it's in the base)
+    if needs_go {
         lines.push(String::new());
-        lines.push("# Cleanup: remove temporary build toolchains".to_string());
-
-        let mut cleanup = vec!["RUN rm -rf".to_string()];
-
-        if needs_rust {
-            cleanup.push("    /usr/local/cargo /usr/local/rustup".to_string());
-        }
-        if needs_go {
-            cleanup.push("    /usr/local/go".to_string());
-        }
-
-        lines.push(cleanup.join(" \\\n"));
+        lines.push("# Cleanup: remove temporary Go toolchain".to_string());
+        lines.push("RUN rm -rf /usr/local/go".to_string());
     }
 
     // Trailing newline
@@ -805,7 +776,7 @@ mod tests {
     fn find_existing_layer() {
         assert!(find("node-20").is_some());
         assert!(find("heroku").is_some());
-        assert!(find("rust").is_some());
+        assert!(find("go").is_some());
     }
 
     #[test]
@@ -888,7 +859,6 @@ mod tests {
         assert!(names.contains(&"node-24"));
         assert!(names.contains(&"heroku"));
         assert!(names.contains(&"python-venv"));
-        assert!(names.contains(&"rust"));
         assert!(names.contains(&"go"));
         assert!(names.contains(&"postgres"));
         assert!(names.contains(&"aws"));
@@ -900,12 +870,20 @@ mod tests {
     }
 
     #[test]
-    fn rust_layer_skips_build_toolchain() {
-        let layers = vec!["rust".to_string(), "exp".to_string()];
+    fn rust_layer_is_no_longer_a_layer() {
+        // rust ships in the base image now — it must not be selectable as a layer
+        assert!(find("rust").is_none());
+        assert!(generate_dockerfile(&vec!["rust".to_string()]).is_err());
+    }
+
+    #[test]
+    fn compiled_rust_layer_skips_build_toolchain_install() {
+        // A compiled-from-Rust layer (e.g. `exp`) must not trigger rustup install
+        // since the base already has cargo on PATH.
+        let layers = vec!["exp".to_string()];
         let result = generate_dockerfile(&layers).unwrap();
+        assert!(!result.contains("sh.rustup.rs"));
         assert!(!result.contains("Build phase: install build toolchains"));
-        assert!(!result.contains("Cleanup: remove build toolchains"));
-        assert!(result.contains("# Layer: rust"));
         assert!(result.contains("# Layer: exp"));
     }
 
@@ -1004,8 +982,8 @@ mod tests {
 
     #[test]
     fn collect_validation_layers_no_deps() {
-        let layers = collect_validation_layers("rust").unwrap();
-        assert_eq!(layers, vec!["rust"]);
+        let layers = collect_validation_layers("go").unwrap();
+        assert_eq!(layers, vec!["go"]);
     }
 
     #[test]
@@ -1030,14 +1008,7 @@ mod tests {
         let layers: Vec<String> = vec![];
         let path = compute_path(&layers);
         assert!(path.starts_with("/project/home/.local/bin:"));
-        assert!(!path.contains("/usr/local/cargo/bin"));
-        assert!(!path.contains("/usr/local/go/bin"));
-    }
-
-    #[test]
-    fn compute_path_with_rust() {
-        let layers = vec!["rust".to_string()];
-        let path = compute_path(&layers);
+        // Rust toolchain ships in the base image, so cargo/bin is always on PATH.
         assert!(path.contains("/usr/local/cargo/bin"));
         assert!(!path.contains("/usr/local/go/bin"));
     }
@@ -1047,18 +1018,6 @@ mod tests {
         let layers = vec!["go".to_string()];
         let path = compute_path(&layers);
         assert!(path.contains("/usr/local/go/bin"));
-        assert!(!path.contains("/usr/local/cargo/bin"));
-    }
-
-    #[test]
-    fn compute_path_with_both() {
-        let layers = vec!["rust".to_string(), "go".to_string()];
-        let path = compute_path(&layers);
         assert!(path.contains("/usr/local/cargo/bin"));
-        assert!(path.contains("/usr/local/go/bin"));
-        // rust should come before go (catalog order)
-        let rust_pos = path.find("/usr/local/cargo/bin").unwrap();
-        let go_pos = path.find("/usr/local/go/bin").unwrap();
-        assert!(rust_pos < go_pos);
     }
 }

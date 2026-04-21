@@ -1,0 +1,40 @@
+# Changelog
+
+All notable changes to claudine are documented here.
+Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+Versions follow [Semantic Versioning](https://semver.org/).
+
+## [Unreleased]
+
+## [0.1.1] - 2026-04-21
+
+### Fixed
+- `repo add` SSH host key verification failure — `gosu` was resetting `HOME` to
+  `/home/claude` (the passwd entry) after the container was started with
+  `-e HOME=/project/home`, causing SSH to look for keys and config in the wrong
+  directory. The entrypoint now preserves the caller-provided `HOME` via
+  `env HOME=` after the privilege drop.
+
+## [0.1.0] - 2026-04-20
+
+### Added
+- Core `init`, `run`, `shell`, `destroy`, `purge`, `build` commands
+- `repo add / remove / list` subcommands for managing repositories in a project
+- `layer` system with catalog: node-20, node-24, rust, go, python-venv, postgres,
+  msodbc, flyway, heroku, gh, glab, lin, exp, terra, rodney
+- Per-layer post-build smoke-test validation (`claudine build --validate`)
+- `zed` command for Zed dev container integration with per-repo workspace targeting
+- Agent-assisted `init` via `claudine init --agent <path>` (Claude analyzes a
+  local folder and proposes repos + layers)
+- SSH key detection from `~/.ssh/config` with host alias resolution
+- Bind-mount + home-volume project layout (host dir + named volume for `$HOME`)
+- `migrate` command to move legacy single-volume projects to the new layout
+- Shell completion generation (`claudine completions`)
+- Passthrough arguments in `claudine shell`
+- `terra` layer built from host-side source checkout with guild CLI and default config seeding
+- `just` command runner pre-installed in the base image
+- Persistent containers across sessions; `destroy` vs `purge` distinction
+
+[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/jstockdi/claudine/compare/v0.1.0...v0.1.1
+[0.1.0]: https://github.com/jstockdi/claudine/releases/tag/v0.1.0

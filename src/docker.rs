@@ -314,11 +314,12 @@ pub fn cmd_destroy(project: &str, purge: bool) -> anyhow::Result<()> {
 
     // Check that the project has some presence (config or volume)
     let has_volume = project::volume_exists(project)?;
+    let has_home_volume = project::docker_volume_exists(&project::home_volume_name(project))?;
     let has_container = project::container_exists(project)?;
     let config_dir = config::config_dir()?.join("projects").join(project);
     let has_config = config_dir.exists();
 
-    if !has_volume && !has_config && !has_container {
+    if !has_volume && !has_home_volume && !has_config && !has_container {
         anyhow::bail!(
             "No project '{}' found. Nothing to destroy.",
             project
@@ -365,10 +366,22 @@ pub fn cmd_destroy(project: &str, purge: bool) -> anyhow::Result<()> {
     }
 
     if purge {
-        // Remove the Docker volume
+        // Remove the Docker volume(s)
         if has_volume {
             println!("Removing volume '{}'...", project::volume_name(project));
             project::remove_volume(project)?;
+        }
+        if has_home_volume {
+            let hv = project::home_volume_name(project);
+            println!("Removing volume '{}'...", hv);
+            let status = Command::new("docker")
+                .args(["volume", "rm", &hv])
+                .stdout(std::process::Stdio::null())
+                .status()
+                .map_err(|e| anyhow::anyhow!("Failed to run 'docker volume rm': {e}"))?;
+            if !status.success() {
+                anyhow::bail!("Failed to remove Docker volume '{}'.", hv);
+            }
         }
 
         // Remove the project config directory
@@ -384,7 +397,7 @@ pub fn cmd_destroy(project: &str, purge: bool) -> anyhow::Result<()> {
 
         println!("Project '{}' purged.", project);
     } else {
-        println!("Container for '{}' removed. Volume and config preserved.", project);
+        println!("Container for '{}' removed. Volume(s) and config preserved.", project);
     }
 
     Ok(())
@@ -472,24 +485,45 @@ pub fn cmd_list() -> anyhow::Result<()> {
 /// This function is shared between `cmd_run` and `cmd_shell` to ensure
 /// consistent container configuration.
 pub(crate) fn build_run_args(project: &str, image: &str, repo: Option<&str>) -> Vec<String> {
+    // Determine layout from project config (bind+home-volume vs legacy full volume)
+    let project_config = config::load_project(project).ok();
+    let host_dir = project_config.as_ref().and_then(|c| c.host_dir.clone());
+
     let mut args = vec![
         "run".to_string(),
         "-d".to_string(),
         "--name".to_string(),
         project::container_name(project),
-        "-v".to_string(),
-        format!("{}:/project", project::volume_name(project)),
-        "-v".to_string(),
-        "/var/run/docker.sock:/var/run/docker.sock".to_string(),
     ];
 
-    // Mount the shared directory if it exists
-    if let Ok(share) = project::share_dir(project) {
-        if share.exists() {
-            args.push("-v".to_string());
-            args.push(format!("{}:/share", share.display()));
+    if let Some(ref dir) = host_dir {
+        // New layout: bind host dir, separate volume for HOME
+        args.extend([
+            "-v".to_string(),
+            format!("{}:/project", dir),
+            "-v".to_string(),
+            format!("{}:/project/home", project::home_volume_name(project)),
+        ]);
+    } else {
+        // Legacy layout: single volume at /project
+        args.extend([
+            "-v".to_string(),
+            format!("{}:/project", project::volume_name(project)),
+        ]);
+
+        // Mount the shared directory if it exists (legacy only)
+        if let Ok(share) = project::share_dir(project) {
+            if share.exists() {
+                args.push("-v".to_string());
+                args.push(format!("{}:/share", share.display()));
+            }
         }
     }
+
+    args.extend([
+        "-v".to_string(),
+        "/var/run/docker.sock:/var/run/docker.sock".to_string(),
+    ]);
 
     args.push("-w".to_string());
     match repo {

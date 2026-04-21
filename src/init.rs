@@ -782,25 +782,27 @@ fn extract_agent_json(text: &str) -> anyhow::Result<AgentResult> {
 
 // -- Shared init execution ------------------------------------------------
 
-/// Execute the init steps: create volume, setup home, clone repos, build layers.
+/// Execute the init steps: create host dir + home volume, setup home, clone repos, build layers.
 fn execute_init(
     name: &str,
     ssh_key: Option<String>,
     repos: Vec<config::RepoConfig>,
     layers: Vec<String>,
 ) -> anyhow::Result<()> {
-    // Create volume if it does not already exist
-    if !project::volume_exists(name)? {
-        println!("Creating volume '{}'...", project::volume_name(name));
-        project::create_volume(name)?;
+    // Host directory: ~/projects/<name>/ — repos get cloned here and this is
+    // bind-mounted into the container at /project.
+    let host_dir = project::default_host_dir(name)?;
+    if !host_dir.exists() {
+        std::fs::create_dir_all(&host_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to create host directory '{}': {e}", host_dir.display()))?;
+        println!("Created host directory: {}", host_dir.display());
     }
 
-    // Create shared directory on the host
-    let share_dir = project::share_dir(name)?;
-    if !share_dir.exists() {
-        std::fs::create_dir_all(&share_dir)
-            .map_err(|e| anyhow::anyhow!("Failed to create share directory '{}': {e}", share_dir.display()))?;
-        println!("Created share directory: {}", share_dir.display());
+    // Create the HOME volume (holds /project/home only)
+    let home_volume = project::home_volume_name(name);
+    if !project::docker_volume_exists(&home_volume)? {
+        println!("Creating home volume '{}'...", home_volume);
+        project::docker_volume_create(&home_volume)?;
     }
 
     // Build and save project config
@@ -819,6 +821,7 @@ fn execute_init(
         ssh_key,
         layers: layers_opt,
         image: image_override,
+        host_dir: Some(host_dir.to_string_lossy().to_string()),
     };
     config::save_project(name, &project_config)?;
 
@@ -936,14 +939,15 @@ fn collect_repos_from_flags(urls: &[String]) -> anyhow::Result<Vec<config::RepoC
 
 const SETUP_HOME_SCRIPT: &str = include_str!("../setup-home.sh");
 
-/// Set up the home directory in the volume with configs, credentials, and settings.
+/// Set up the home directory in the home volume with configs, credentials, and settings.
 /// Runs a one-shot container with the embedded setup script.
 fn setup_home(
     project_name: &str,
     image: &str,
     ssh_key: Option<&str>,
 ) -> anyhow::Result<()> {
-    let volume = project::volume_name(project_name);
+    let project_config = config::load_project(project_name).ok();
+    let host_dir = project_config.as_ref().and_then(|c| c.host_dir.clone());
     let home = dirs::home_dir().ok_or_else(|| anyhow::anyhow!("Cannot determine home directory"))?;
 
     // Write setup script to a temp file
@@ -954,11 +958,28 @@ fn setup_home(
     let mut args: Vec<String> = vec![
         "run".to_string(),
         "--rm".to_string(),
-        "-v".to_string(),
-        format!("{}:/project", volume),
+    ];
+
+    if let Some(ref dir) = host_dir {
+        // New layout: bind host dir, separate volume for HOME
+        args.extend([
+            "-v".to_string(),
+            format!("{}:/project", dir),
+            "-v".to_string(),
+            format!("{}:/project/home", project::home_volume_name(project_name)),
+        ]);
+    } else {
+        // Legacy layout: single volume at /project
+        args.extend([
+            "-v".to_string(),
+            format!("{}:/project", project::volume_name(project_name)),
+        ]);
+    }
+
+    args.extend([
         "-v".to_string(),
         format!("{}:/tmp/setup-home.sh:ro", tmp.path().display()),
-    ];
+    ]);
 
     // Mount host configs for the setup script to copy
     let gitconfig = home.join(".gitconfig");
@@ -990,14 +1011,15 @@ fn setup_home(
     Ok(())
 }
 
-/// Clone a single repository into the project volume.
-/// Assumes setup_home has already run, so SSH keys and git config are in the volume.
+/// Clone a single repository into the project workspace (host bind or legacy volume).
+/// Assumes setup_home has already run so SSH keys and git config are in the home volume.
 pub fn clone_repo(
     project_name: &str,
     image: &str,
     repo: &config::RepoConfig,
 ) -> anyhow::Result<()> {
-    let volume = project::volume_name(project_name);
+    let project_config = config::load_project(project_name).ok();
+    let host_dir = project_config.as_ref().and_then(|c| c.host_dir.clone());
 
     // Clone command — clone into /project/<dir>
     let clone_target = format!("/project/{}", repo.dir);
@@ -1013,12 +1035,27 @@ pub fn clone_repo(
     let mut args: Vec<String> = vec![
         "run".to_string(),
         "--rm".to_string(),
-        "-v".to_string(),
-        format!("{}:/project", volume),
+    ];
+
+    if let Some(ref dir) = host_dir {
+        args.extend([
+            "-v".to_string(),
+            format!("{}:/project", dir),
+            "-v".to_string(),
+            format!("{}:/project/home", project::home_volume_name(project_name)),
+        ]);
+    } else {
+        args.extend([
+            "-v".to_string(),
+            format!("{}:/project", project::volume_name(project_name)),
+        ]);
+    }
+
+    args.extend([
         "-e".to_string(),
         "HOME=/project/home".to_string(),
         image.to_string(),
-    ];
+    ]);
     args.extend(clone_cmd);
 
     println!("Cloning {}...", repo.dir);

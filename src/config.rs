@@ -15,6 +15,11 @@ pub struct ProjectConfig {
     pub ssh_key: Option<String>,
     pub layers: Option<Vec<String>>,
     pub image: Option<ImageConfig>,
+    /// When set, `/project` is a bind mount of this host directory and
+    /// `/project/home` is the separate home volume. When unset, the project
+    /// uses the legacy single-volume layout.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub host_dir: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -106,6 +111,7 @@ fn migrate_project_config(raw: &str) -> Option<ProjectConfig> {
         ssh_key: None,
         layers: None,
         image: legacy.image,
+        host_dir: None,
     })
 }
 
@@ -280,6 +286,7 @@ mod tests {
             image: Some(ImageConfig {
                 name: "custom:latest".to_string(),
             }),
+            host_dir: None,
         };
         assert_eq!(resolve_image(&project, &global), "custom:latest");
     }
@@ -296,6 +303,7 @@ mod tests {
             ssh_key: None,
             layers: None,
             image: None,
+            host_dir: None,
         };
         assert_eq!(resolve_image(&project, &global), "claudine:latest");
     }
@@ -318,6 +326,7 @@ mod tests {
             ssh_key: Some("/Users/test/.ssh/id_ed25519".to_string()),
             layers: None,
             image: None,
+            host_dir: None,
         };
         let serialized = toml::to_string_pretty(&config).unwrap();
         let deserialized: ProjectConfig = toml::from_str(&serialized).unwrap();
