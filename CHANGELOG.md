@@ -6,6 +6,21 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-04-25
+
+### Changed
+- Bind-mount + home-volume is now the only supported project layout. `host_dir`
+  defaults to `~/projects/<name>/` when not set in config, eliminating the need
+  to ever explicitly configure it for new projects.
+- Container working directory and volume mounts now use the host path verbatim
+  (e.g. `/Users/you/projects/myproject`) rather than the fixed `/project` alias.
+
+### Removed
+- `migrate` command — all projects now use the bind-mount layout; the migration
+  path is no longer needed.
+- Legacy single-volume layout support (`claudine_<project>` Docker volume, `~/share/<project>/`
+  fallback, and all associated code paths).
+
 ## [0.1.2] - 2026-04-21
 
 ### Fixed
@@ -41,7 +56,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/jstockdi/claudine/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jstockdi/claudine/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jstockdi/claudine/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/jstockdi/claudine/releases/tag/v0.1.0
