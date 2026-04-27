@@ -6,6 +6,14 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-04-27
+
+### Fixed
+- Home volume now mounts at `/home/claude` (the passwd entry) instead of
+  `/project/home`. OpenSSH resolves `~/.ssh` via `getpwuid()`, not `$HOME`,
+  so mounting at the passwd home ensures SSH keys, known_hosts, and `$HOME`
+  all point to the same location without any env-var override.
+
 ## [0.2.0] - 2026-04-25
 
 ### Changed
@@ -56,7 +64,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jstockdi/claudine/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/jstockdi/claudine/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/jstockdi/claudine/compare/v0.1.2...v0.2.0
 [0.1.2]: https://github.com/jstockdi/claudine/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/jstockdi/claudine/compare/v0.1.0...v0.1.1
