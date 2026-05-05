@@ -6,6 +6,19 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-05-05
+
+### Added
+- `sumo` layer: Sumo Logic log query CLI, built from
+  [Battle-Creek-LLC/sumo](https://github.com/Battle-Creek-LLC/sumo).
+
+### Changed
+- Compiled-from-source layers (`lin`, `exp`, `sumo`, `glab`, `rodney`) now
+  clean up their build caches at the end of each `RUN`. Rust layers remove
+  `/usr/local/cargo/{registry,git}`; Go layers remove `/root/go` and
+  `/root/.cache/go-build`. This shrinks per-project images by hundreds of
+  megabytes per compiled tool.
+
 ## [0.4.1] - 2026-05-04
 
 ### Added
@@ -86,7 +99,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.2.1...v0.3.0

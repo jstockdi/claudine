@@ -167,7 +167,7 @@ pub fn catalog() -> Vec<Layer> {
             description: "Fast CLI for Linear (built from source)",
             requires: &[],
             build_tool: Some(BuildTool::Rust),
-            dockerfile: "RUN git clone https://github.com/sprouted-dev/lin.git /tmp/lin \\\n    && cd /tmp/lin \\\n    && cargo build --release \\\n    && cp target/release/lin /usr/local/bin/lin \\\n    && chmod 755 /usr/local/bin/lin \\\n    && rm -rf /tmp/lin".to_string(),
+            dockerfile: "RUN git clone https://github.com/sprouted-dev/lin.git /tmp/lin \\\n    && cd /tmp/lin \\\n    && cargo build --release \\\n    && cp target/release/lin /usr/local/bin/lin \\\n    && chmod 755 /usr/local/bin/lin \\\n    && rm -rf /tmp/lin /usr/local/cargo/registry /usr/local/cargo/git".to_string(),
             validate: &["lin --help"],
             path: &[],
             source_repo: None,
@@ -178,8 +178,19 @@ pub fn catalog() -> Vec<Layer> {
             description: "Experiment tracker CLI (built from source)",
             requires: &[],
             build_tool: Some(BuildTool::Rust),
-            dockerfile: "RUN git clone https://github.com/jstockdi/exp.git /tmp/exp \\\n    && cd /tmp/exp \\\n    && cargo build --release \\\n    && cp target/release/exp /usr/local/bin/exp \\\n    && chmod 755 /usr/local/bin/exp \\\n    && rm -rf /tmp/exp".to_string(),
+            dockerfile: "RUN git clone https://github.com/jstockdi/exp.git /tmp/exp \\\n    && cd /tmp/exp \\\n    && cargo build --release \\\n    && cp target/release/exp /usr/local/bin/exp \\\n    && chmod 755 /usr/local/bin/exp \\\n    && rm -rf /tmp/exp /usr/local/cargo/registry /usr/local/cargo/git".to_string(),
             validate: &["exp --help"],
+            path: &[],
+            source_repo: None,
+            source_ref: None,
+        },
+        Layer {
+            name: "sumo",
+            description: "Sumo Logic log query CLI (built from source)",
+            requires: &[],
+            build_tool: Some(BuildTool::Rust),
+            dockerfile: "RUN git clone https://github.com/Battle-Creek-LLC/sumo.git /tmp/sumo \\\n    && cd /tmp/sumo \\\n    && cargo build --release \\\n    && cp target/release/sumo /usr/local/bin/sumo \\\n    && chmod 755 /usr/local/bin/sumo \\\n    && rm -rf /tmp/sumo /usr/local/cargo/registry /usr/local/cargo/git".to_string(),
+            validate: &["sumo --help"],
             path: &[],
             source_repo: None,
             source_ref: None,
@@ -210,7 +221,7 @@ pub fn catalog() -> Vec<Layer> {
             description: "GitLab CLI (built from source, jstockdi fork)",
             requires: &[],
             build_tool: Some(BuildTool::Go),
-            dockerfile: "RUN git clone https://github.com/jstockdi/glab.git /tmp/glab \\\n    && cd /tmp/glab \\\n    && make build \\\n    && cp bin/glab /usr/local/bin/glab \\\n    && chmod 755 /usr/local/bin/glab \\\n    && rm -rf /tmp/glab".to_string(),
+            dockerfile: "RUN git clone https://github.com/jstockdi/glab.git /tmp/glab \\\n    && cd /tmp/glab \\\n    && make build \\\n    && cp bin/glab /usr/local/bin/glab \\\n    && chmod 755 /usr/local/bin/glab \\\n    && rm -rf /tmp/glab /root/go /root/.cache/go-build".to_string(),
             validate: &["glab version"],
             path: &[],
             source_repo: None,
@@ -254,7 +265,7 @@ pub fn catalog() -> Vec<Layer> {
             description: "Chrome automation CLI (built from source, jstockdi fork)",
             requires: &[],
             build_tool: Some(BuildTool::Go),
-            dockerfile: "RUN apt-get update && apt-get install -y --no-install-recommends chromium \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && git clone https://github.com/jstockdi/rodney.git /tmp/rodney \\\n    && cd /tmp/rodney \\\n    && go build -o /usr/local/bin/rodney . \\\n    && chmod 755 /usr/local/bin/rodney \\\n    && rm -rf /tmp/rodney".to_string(),
+            dockerfile: "RUN apt-get update && apt-get install -y --no-install-recommends chromium \\\n    && rm -rf /var/lib/apt/lists/* \\\n    && git clone https://github.com/jstockdi/rodney.git /tmp/rodney \\\n    && cd /tmp/rodney \\\n    && go build -o /usr/local/bin/rodney . \\\n    && chmod 755 /usr/local/bin/rodney \\\n    && rm -rf /tmp/rodney /root/go /root/.cache/go-build".to_string(),
             validate: &["chromium --version", "rodney --help"],
             path: &[],
             source_repo: None,
@@ -865,6 +876,7 @@ mod tests {
         assert!(names.contains(&"java"));
         assert!(names.contains(&"flyway"));
         assert!(names.contains(&"exp"));
+        assert!(names.contains(&"sumo"));
         assert!(names.contains(&"terraform"));
         assert!(names.contains(&"doctl"));
     }
