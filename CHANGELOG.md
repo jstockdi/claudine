@@ -6,6 +6,12 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-05-04
+
+### Added
+- `groff` in the base image so CLI tools that render man pages on demand
+  (notably AWS CLI v2's `aws help`) work without errors.
+
 ## [0.4.0] - 2026-05-02
 
 ### Added
@@ -80,7 +86,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.2.1...v0.3.0
 [0.2.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.2.0...v0.2.1

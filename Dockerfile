@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     gosu \
     git \
+    groff \
     jq \
     libdbus-1-dev \
     libssl-dev \
