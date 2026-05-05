@@ -6,6 +6,20 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-05-05
+
+### Added
+- `cargo-binstall` is now installed in the base image and used to fetch
+  prebuilt binaries for `ward`, `exp`, and `sumo` instead of cloning each
+  repo and running `cargo build --release`. This skips ~3 release builds
+  per fresh image — the Rust toolchain is no longer on the hot path for
+  these tools. Pinned versions: `bcl-ward@0.1.2` (base image),
+  `exp@0.1.2`, `bcl-sumo@0.1.4` (stacked layers). Versions are
+  `--build-arg`-overridable via `WARD_VERSION` / `EXP_VERSION` /
+  `SUMO_VERSION`. Resolution depends on each crate's
+  `[package.metadata.binstall]` block, so URL/binary naming is owned by
+  the upstream repo, not claudine.
+
 ## [0.5.0] - 2026-05-05
 
 ### Added
@@ -99,7 +113,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.1...HEAD
+[0.5.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.3.0...v0.4.0

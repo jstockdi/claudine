@@ -55,13 +55,15 @@ ENV PATH=/usr/local/cargo/bin:$PATH
 
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
 
-# Install ward (PII/secrets scanner for Claude Code hooks)
-RUN git clone https://github.com/jstockdi/ward.git /tmp/ward \
-    && cd /tmp/ward \
-    && cargo build --release \
-    && cp target/release/ward /usr/local/bin/ward \
-    && chmod 755 /usr/local/bin/ward \
-    && rm -rf /tmp/ward
+# Install cargo-binstall (downloads prebuilt binaries instead of compiling them).
+# Used here for ward, and reused by stacked layers (exp, sumo).
+RUN curl -L --proto '=https' --tlsv1.2 -sSf \
+      https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
+      | bash
+
+# Install ward (PII/secrets scanner for Claude Code hooks) from prebuilt release
+ARG WARD_VERSION=0.1.2
+RUN cargo binstall -y --root /usr/local "bcl-ward@${WARD_VERSION}"
 
 # Install `just` command runner into the base so every project has it
 RUN cargo install just --root /usr/local \
