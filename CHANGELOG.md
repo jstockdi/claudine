@@ -6,6 +6,18 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-05-06
+
+### Changed
+- Base image shrunk from ~4.0GB to ~1.9GB (-52%) via three Dockerfile
+  tweaks: `rustup` now installs with `--profile minimal` (drops rust-docs);
+  `just` is fetched via `cargo binstall` instead of compiled from source;
+  and the `chmod -R a+rwX` previously applied in the `useradd` layer was
+  removed — that layer was creating a copy-on-write duplicate of every
+  file under `/usr/local/rustup` and `/usr/local/cargo` (~500MB). Cargo
+  perms are still set in the prior `just`-install RUN. Rebuilt project
+  images shrink proportionally (e.g. `plotzy` 9.8GB → 5.0GB).
+
 ## [0.5.1] - 2026-05-05
 
 ### Added
@@ -113,7 +125,8 @@ Versions follow [Semantic Versioning](https://semver.org/).
 - `just` command runner pre-installed in the base image
 - Persistent containers across sessions; `destroy` vs `purge` distinction
 
-[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.1...HEAD
+[Unreleased]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.2...HEAD
+[0.5.2]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.1...v0.5.2
 [0.5.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.5.0...v0.5.1
 [0.5.0]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.1...v0.5.0
 [0.4.1]: https://github.com/Battle-Creek-LLC/claudine/compare/v0.4.0...v0.4.1

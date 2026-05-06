@@ -53,10 +53,11 @@ ENV RUSTUP_HOME=/usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo
 ENV PATH=/usr/local/cargo/bin:$PATH
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+      | sh -s -- -y --no-modify-path --profile minimal
 
 # Install cargo-binstall (downloads prebuilt binaries instead of compiling them).
-# Used here for ward, and reused by stacked layers (exp, sumo).
+# Used here for ward and just, and reused by stacked layers (exp, sumo).
 RUN curl -L --proto '=https' --tlsv1.2 -sSf \
       https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh \
       | bash
@@ -65,14 +66,17 @@ RUN curl -L --proto '=https' --tlsv1.2 -sSf \
 ARG WARD_VERSION=0.1.2
 RUN cargo binstall -y --root /usr/local "bcl-ward@${WARD_VERSION}"
 
-# Install `just` command runner into the base so every project has it
-RUN cargo install just --root /usr/local \
+# Install `just` command runner via prebuilt binary so every project has it
+RUN cargo binstall -y --root /usr/local just \
+    && rm -rf /usr/local/cargo/registry /usr/local/cargo/git \
     && chmod -R a+rwX /usr/local/cargo
 
 # Create non-root user. The home volume is mounted at /home/claude at runtime,
 # shadowing the image's /home/claude so shell state persists across containers.
+# Note: cargo perms are set in the just-install RUN above to avoid creating a
+# duplicate copy-on-write layer of /usr/local/cargo. /usr/local/rustup is left
+# at rustup's default perms (world-readable, root-writable).
 RUN useradd -m -d /home/claude -s /bin/zsh claude \
-    && chmod -R a+rwX /usr/local/rustup /usr/local/cargo \
     && echo 'claude ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/claude \
     && chmod 0440 /etc/sudoers.d/claude
 
