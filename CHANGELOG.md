@@ -6,6 +6,13 @@ Versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Three new layers, all installed via `cargo binstall` from crates.io:
+  `sntry` (Sentry read-side CLI, `bcl-sntry@0.1.1`), `ddog` (Datadog
+  logs CLI, `bcl-ddog@0.1.0`), and `secunit` (WISP control registry
+  helper CLI, `bcl-secunit@0.1.1`). Versions are pinned via
+  `ARG <NAME>_VERSION` in each layer's Dockerfile snippet.
+
 ## [0.5.2] - 2026-05-06
 
 ### Changed
