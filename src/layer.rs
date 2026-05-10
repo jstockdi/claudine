@@ -174,6 +174,17 @@ pub fn catalog() -> Vec<Layer> {
             source_ref: None,
         },
         Layer {
+            name: "secunit",
+            description: "WISP control registry helper CLI",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "ARG SECUNIT_VERSION=0.1.1\nRUN cargo binstall -y --root /usr/local \"bcl-secunit@${SECUNIT_VERSION}\"".to_string(),
+            validate: &["secunit --help"],
+            path: &[],
+            source_repo: None,
+            source_ref: None,
+        },
+        Layer {
             name: "exp",
             description: "Experiment tracker CLI",
             requires: &[],
@@ -191,6 +202,17 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "ARG SUMO_VERSION=0.1.4\nRUN cargo binstall -y --root /usr/local \"bcl-sumo@${SUMO_VERSION}\"".to_string(),
             validate: &["sumo --help"],
+            path: &[],
+            source_repo: None,
+            source_ref: None,
+        },
+        Layer {
+            name: "sntry",
+            description: "Sentry read-side CLI",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "ARG SNTRY_VERSION=0.1.1\nRUN cargo binstall -y --root /usr/local \"bcl-sntry@${SNTRY_VERSION}\"".to_string(),
+            validate: &["sntry --help"],
             path: &[],
             source_repo: None,
             source_ref: None,
@@ -256,6 +278,17 @@ pub fn catalog() -> Vec<Layer> {
             build_tool: None,
             dockerfile: "RUN DOCTL_VERSION=$(curl -fsSL https://api.github.com/repos/digitalocean/doctl/releases/latest | grep '\"tag_name\"' | sed 's/.*\"v\\(.*\\)\".*/\\1/') \\\n    && curl -fsSL \"https://github.com/digitalocean/doctl/releases/download/v${DOCTL_VERSION}/doctl-${DOCTL_VERSION}-linux-$(dpkg --print-architecture).tar.gz\" | tar -C /usr/local/bin -xz \\\n    && chmod 755 /usr/local/bin/doctl".to_string(),
             validate: &["doctl version"],
+            path: &[],
+            source_repo: None,
+            source_ref: None,
+        },
+        Layer {
+            name: "ddog",
+            description: "Datadog logs CLI",
+            requires: &[],
+            build_tool: None,
+            dockerfile: "ARG DDOG_VERSION=0.1.0\nRUN cargo binstall -y --root /usr/local \"bcl-ddog@${DDOG_VERSION}\"".to_string(),
+            validate: &["ddog --help"],
             path: &[],
             source_repo: None,
             source_ref: None,
@@ -877,6 +910,9 @@ mod tests {
         assert!(names.contains(&"flyway"));
         assert!(names.contains(&"exp"));
         assert!(names.contains(&"sumo"));
+        assert!(names.contains(&"sntry"));
+        assert!(names.contains(&"secunit"));
+        assert!(names.contains(&"ddog"));
         assert!(names.contains(&"terraform"));
         assert!(names.contains(&"doctl"));
     }
