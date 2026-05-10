@@ -211,7 +211,7 @@ pub fn catalog() -> Vec<Layer> {
             description: "WISP control registry helper CLI",
             requires: &[],
             build_tool: None,
-            dockerfile: "ARG SECUNIT_VERSION=0.1.1\nRUN curl -fsSL \"https://github.com/Battle-Creek-LLC/secunit/releases/download/v${SECUNIT_VERSION}/secunit-$(uname -m)-unknown-linux-gnu.tar.gz\" | tar -C /usr/local/bin -xz \\\n    && chmod 755 /usr/local/bin/secunit".to_string(),
+            dockerfile: "ARG SECUNIT_VERSION=0.1.2\nRUN cargo binstall -y --root /usr/local \"bcl-secunit@${SECUNIT_VERSION}\"".to_string(),
             validate: &["secunit --help"],
             path: &[],
             source_repo: None,
