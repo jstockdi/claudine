@@ -7,14 +7,11 @@ Versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- `sntry` layer: Sentry read-side CLI, installed via
-  `cargo binstall bcl-sntry@0.1.1` from crates.io.
-- `ddog` layer: Datadog logs CLI, fetched as a prebuilt tarball from
-  the GitHub release at `Battle-Creek-LLC/ddog v0.1.0`. Pinned with
-  `ARG DDOG_VERSION=0.1.0`.
-- `secunit` layer: WISP control registry helper CLI, built from source
-  via `cargo build -p secunit-cli` (cloned from `jstoplo/secunit`).
-  Compile-from-source like `lin` since secunit is not yet published.
+- Three new layers, all installed via `cargo binstall` from crates.io:
+  `sntry` (Sentry read-side CLI, `bcl-sntry@0.1.1`), `ddog` (Datadog
+  logs CLI, `bcl-ddog@0.1.0`), and `secunit` (WISP control registry
+  helper CLI, `bcl-secunit@0.1.1`). Versions are pinned via
+  `ARG <NAME>_VERSION` in each layer's Dockerfile snippet.
 
 ## [0.5.2] - 2026-05-06
 

@@ -113,6 +113,12 @@ fn validate_sntry() {
 
 #[test]
 #[ignore]
+fn validate_secunit() {
+    validate("secunit");
+}
+
+#[test]
+#[ignore]
 fn validate_postgres() {
     validate("postgres");
 }
@@ -123,12 +129,6 @@ fn validate_postgres() {
 #[ignore]
 fn validate_lin() {
     validate("lin");
-}
-
-#[test]
-#[ignore]
-fn validate_secunit() {
-    validate("secunit");
 }
 
 #[test]
